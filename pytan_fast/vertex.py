@@ -5,10 +5,11 @@ from pytan_fast.settings import tile_roll_number_type_count, resource_type_count
 
 class Vertex:
 	def __repr__(self):
-		return "Vertex{}".format(self.index)
+		return "Vertex{}".format(self.key)
 
-	def __init__(self, index, settlement, city, is_open, port):
+	def __init__(self, index, key, settlement, city, is_open, port):
 		self.index = index
+		self.key = key
 		self.settlement = settlement
 		self.city = city
 		self.open = is_open

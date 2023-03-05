@@ -37,14 +37,16 @@ class Board:
 		self.robbed_tile = None
 
 		self.tiles = [Tile(
-			index=tile,
+			key=tile,
+			index=self.tile_hash[tile],
 			has_robber=self.state.game_state_slices[tile_has_robber][self.tile_hash[tile]:self.tile_hash[tile]+1],
 			resource=self.state.game_state_slices[tile_resource][self.tile_hash[tile], :],
 			roll_number=self.state.game_state_slices[tile_roll_number][self.tile_hash[tile], :],
 		) for tile in self.tile_list]
 
 		self.vertices = [Vertex(
-			index=vertex,
+			key=vertex,
+			index=self.vertex_hash[vertex],
 			settlement=self.state.game_state_slices[vertex_settlement][self.vertex_hash[vertex]:self.vertex_hash[vertex]+1],
 			city=self.state.game_state_slices[vertex_city][self.vertex_hash[vertex]:self.vertex_hash[vertex]+1],
 			is_open=self.state.game_state_slices[vertex_open][self.vertex_hash[vertex]:self.vertex_hash[vertex]+1],
@@ -52,39 +54,40 @@ class Board:
 		) for vertex in self.vertex_list]
 
 		self.edges = [Edge(
-			index=edge,
+			key=edge,
+			index=self.edge_hash[edge],
 			is_open=self.state.game_state_slices[edge_open][self.edge_hash[edge]:self.edge_hash[edge]+1],
 		) for edge in self.edge_list]
 
 		# Connect adjacent geometries together
 		for tile in self.tiles:
-			for adjacent_tile in get_tile_tiles(*tile.index):
+			for adjacent_tile in get_tile_tiles(*tile.key):
 				if adjacent_tile in self.tile_list:
 					tile.tiles.append(self.tiles[self.tile_hash[adjacent_tile]])
-			for adjacent_vertex in get_tile_vertices(*tile.index):
+			for adjacent_vertex in get_tile_vertices(*tile.key):
 				if adjacent_vertex in self.vertex_list:
 					tile.vertices.append(self.vertices[self.vertex_hash[adjacent_vertex]])
-			for adjacent_edge in get_tile_edges(*tile.index):
+			for adjacent_edge in get_tile_edges(*tile.key):
 				if adjacent_edge in self.edge_list:
 					tile.edges.append(self.edges[self.edge_hash[adjacent_edge]])
 		for vertex in self.vertices:
-			for adjacent_tile in get_vertex_tiles(*vertex.index):
+			for adjacent_tile in get_vertex_tiles(*vertex.key):
 				if adjacent_tile in self.tile_list:
 					vertex.tiles.append(self.tiles[self.tile_hash[adjacent_tile]])
-			for adjacent_vertex in get_vertex_vertices(*vertex.index):
+			for adjacent_vertex in get_vertex_vertices(*vertex.key):
 				if adjacent_vertex in self.vertex_list:
 					vertex.vertices.append(self.vertices[self.vertex_hash[adjacent_vertex]])
-			for adjacent_edge in get_vertex_edges(*vertex.index):
+			for adjacent_edge in get_vertex_edges(*vertex.key):
 				if adjacent_edge in self.edge_list:
 					vertex.edges.append(self.edges[self.edge_hash[adjacent_edge]])
 		for edge in self.edges:
-			for adjacent_tile in get_edge_tiles(*edge.index):
+			for adjacent_tile in get_edge_tiles(*edge.key):
 				if adjacent_tile in self.tile_list:
 					edge.tiles.append(self.tiles[self.tile_hash[adjacent_tile]])
-			for adjacent_vertex in get_edge_vertices(*edge.index):
+			for adjacent_vertex in get_edge_vertices(*edge.key):
 				if adjacent_vertex in self.vertex_list:
 					edge.vertices.append(self.vertices[self.vertex_hash[adjacent_vertex]])
-			for adjacent_edge in get_edge_edges(*edge.index):
+			for adjacent_edge in get_edge_edges(*edge.key):
 				if adjacent_edge in self.edge_list:
 					edge.edges.append(self.edges[self.edge_hash[adjacent_edge]])
 

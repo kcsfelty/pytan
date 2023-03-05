@@ -45,32 +45,3 @@ class Mask:
 
 	def cannot(self, term):
 		self.mask_slices[term].fill(False)
-
-	def start_turn(self):
-		self.mask.fill(False)
-		self.play_road_building.fill(True)
-		self.play_monopoly.fill(True)
-		self.play_knight.fill(True)
-		self.play_year_of_plenty.fill(True)
-		self.roll_dice.fill(True)
-
-	def play_dev_card(self, set_to=False):
-		self.play_monopoly.fill(set_to)
-		self.play_knight.fill(set_to)
-		self.play_year_of_plenty.fill(set_to)
-		self.roll_dice.fill(set_to)
-
-	def trading(self, set_to=False):
-		self.bank_trade.fill(set_to)
-		self.general_port_trade.fill(set_to)
-		self.resource_port_trade.fill(set_to)
-		self.offer_player_trade.fill(set_to)
-
-	def post_roll(self):
-		self.mask.fill(False)
-		self.end_turn.fill(True)
-		self.trading(True)
-		self.place_settlement.fill(True)
-		self.place_city.fill(True)
-		self.place_road.fill(True)
-

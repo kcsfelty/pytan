@@ -3,10 +3,11 @@ import pytan_fast.definitions as df
 
 class Edge:
 	def __repr__(self):
-		return "Edge{}".format(self.index)
+		return "Edge{}".format(self.key)
 
-	def __init__(self, index, is_open):
+	def __init__(self, index, key, is_open):
 		self.index = index
+		self.key = key
 		self.open = is_open
 		self.tiles = []
 		self.vertices = []

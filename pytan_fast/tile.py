@@ -3,10 +3,11 @@ import numpy as np
 
 class Tile:
 	def __repr__(self):
-		return "Tile{}".format(self.index)
+		return "Tile{}".format(self.key)
 
-	def __init__(self, index, has_robber, resource, roll_number):
+	def __init__(self, index, key, has_robber, resource, roll_number):
 		self.index = index
+		self.key = key
 		self.tiles = []
 		self.vertices = []
 		self.edges = []

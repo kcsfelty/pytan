@@ -33,7 +33,7 @@ build_phase_free_road = True
 
 # Robber / Robbing
 robber_steals_card_quantity = 1
-robber_activated_on_roll = 5
+robber_activation_roll = 5
 friendly_robber_threshold = 2
 rob_player_above_card_count = 7
 robber_discard_ratio = 2
@@ -110,7 +110,7 @@ general_port_index = 5
 # Victory Points
 victory_points_to_win = 10
 settlement_victory_points = 1
-city_victory_points = 1
+city_victory_points = 2
 victory_point_card_victory_points = 1
 longest_road_victory_points = 2
 min_longest_road = 5
