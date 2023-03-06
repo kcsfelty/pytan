@@ -15,7 +15,7 @@ import pytan_fast.definitions as df
 from pytan_fast.board import Board
 from pytan_fast.handler import Handler
 from pytan_fast.player import Player
-from pytan_fast.settings import player_count, development_card_count_per_type, resource_card_count_per_type
+from pytan_fast.settings import player_count, development_card_count_per_type, resource_card_count_per_type, knight_index
 from pytan_fast.states.state import State
 from util.Dice import Dice
 
@@ -38,7 +38,7 @@ last_step_type = tf.convert_to_tensor(np.expand_dims(StepType.LAST, axis=0))
 
 
 class PyTanFast(PyEnvironment, ABC):
-	def __init__(self, policy_list, observer_list, summary_list, global_step, victory_point_limit=10):
+	def __init__(self, policy_list, observer_list, summary_list, global_step, log_dir="./training", victory_point_limit=10):
 		super().__init__()
 		self.global_step = global_step
 		self.state = State()
@@ -88,10 +88,9 @@ class PyTanFast(PyEnvironment, ABC):
 		self.max_victory_points = 0
 
 		# Summaries
-		self.file_dir = "./training"
-		self.current_run = 14
+		self.log_dir = log_dir + "/game"
 		self.episode_number = 0
-		self.writer = tf.compat.v2.summary.create_file_writer(self.file_dir + "/run{}".format(self.current_run) + "/game")
+		self.writer = tf.compat.v2.summary.create_file_writer(self.log_dir)
 
 		self._reset()
 
@@ -150,16 +149,66 @@ class PyTanFast(PyEnvironment, ABC):
 			player.static_mask.buy_development_card.fill(1)
 
 	def end_game(self):
+		end = time.perf_counter()
 		for writer, player in zip(self.summary_list, self.player_list):
 			writer(player.get_episode_summaries(), self.global_step)
+
 		with self.writer.as_default():
 			tf.summary.scalar(name="turn_count", data=self.state.game_state_slices[df.turn_number].item(), step=self.global_step.item())
-		end = time.perf_counter()
-		# self.total_steps += self.num_step
-		print("Game completed", "took", end - self.episode_start, "steps", self.num_step, "turns",self.state.game_state_slices[df.turn_number], "steps/s", self.num_step / (end - self.episode_start))
-		for player in self.player_list:
-			print(player)
-		print("=============================================")
+			game_name = "game_{}".format(self.episode_number)
+			# recap_data = [
+			# 	[str(int(player.actual_victory_points)).ljust(2) for player in self.player_list],
+			# 	[str(player.resource_cards).ljust(15) for player in self.player_list],
+			# 	[str(player.development_cards_played.tolist()).ljust(15) for player in self.player_list],
+			# 	[str(int(player.settlement_count)).ljust(3) for player in self.player_list],
+			# 	[str(int(player.city_count)).ljust(3) for player in self.player_list],
+			# 	[str(int(player.road_count)).ljust(3) for player in self.player_list],
+			# 	[str(player.development_cards_played[knight_index])+"+" if player.owns_largest_army else " " for player in self.player_list],
+			# 	[str(player.longest_road) + "+" if player.owns_longest_road else " " for player in self.player_list],
+			# 	[str(int(player.policy_action_count / (player.implicit_action_count + 1e-9) * 1e2)) for player in self.player_list],
+			# 	[player.episode_rewards for player in self.player_list],
+			# 	[player.victory_points.item() for player in self.player_list],
+			# 	[player.settlement_count.item() for player in self.player_list],
+			# 	[player.city_count.item() for player in self.player_list],
+			# 	[player.road_count.item() for player in self.player_list],
+			# 	[np.sum(player.distribution_total).item() / self.state.game_state_slices[df.turn_number].item() for player in self.player_list],
+			# 	[np.sum(player.steal_total).item() for player in self.player_list],
+			# 	[np.sum(player.stolen_total).item() for player in self.player_list],
+			# 	[np.sum(player.discard_total).item() / self.state.game_state_slices[df.turn_number].item() for player in self.player_list],
+			# 	[np.sum(player.bank_trade_total).item() for player in self.player_list],
+			# 	[np.sum(player.player_trade_total).item() for player in self.player_list],
+			# 	[player.policy_action_count / player.implicit_action_count for player in self.player_list],
+			# 	[player.longest_road / player.road_count.item() for player in self.player_list],
+			# ]
+			# recap_body = ""
+			# recap_body += "|".join(["", *["Agent{}".format(player.index) for player in self.player_list]]) + "\n"
+			# recap_body += "|:---|----:|----:|----:|" + "\n"
+			# recap_body += "\n".join(["|".join([str(x) for x in data_line]) for data_line in recap_data])
+			#
+			# recap_body = """
+			# 	### Markdown Text
+			#
+			# 	TensorBoard supports basic markdown syntax, including:
+			#
+			# 		preformatted code
+			#
+			# 	**bold text**
+			#
+			# 	| and | tables |
+			# 	| ---- | ---------- |
+			# 	| among | others |
+			# 	"""
+			#
+			# recap_body = np.array([str(x) for x in range(16)])
+			# recap_body = recap_body.reshape((4, 4))
+			# recap_body = tf.convert_to_tensor(recap_body)
+
+			# tf.summary.text(name=game_name, data=recap_body, step=self.total_steps)
+			tf.summary.text(name=game_name, data="Steps/s: {}".format(int(self.num_step / (end - self.episode_start))), step=self.total_steps)
+			tf.summary.text(name=game_name, data="Turns: {}".format(self.state.game_state_slices[df.turn_number].item()), step=self.total_steps)
+			tf.summary.text(name=game_name, data="Steps: {}".format(str(self.num_step)), step=self.total_steps)
+			tf.summary.text(name=game_name, data="Duration: {}s".format(str(end - self.episode_start)), step=self.total_steps)
+
 		self.episode_number += 1
 
 	def action_spec(self) -> types.NestedArraySpec:

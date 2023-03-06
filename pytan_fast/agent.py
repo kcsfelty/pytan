@@ -1,8 +1,10 @@
 import os
+import time
 
 import tensorflow as tf
 from tf_agents.agents.categorical_dqn import categorical_dqn_agent
 from tf_agents.networks import categorical_q_network
+from tf_agents.policies import PolicySaver
 from tf_agents.replay_buffers import tf_uniform_replay_buffer
 from tf_agents.utils import common
 
@@ -16,21 +18,19 @@ class FastAgent:
 	def __init__(self,
 				 env_specs,
 				 player_index,
-				 # global_step,
+				 log_dir,
 				 learning_rate=0.005,
-				 current_run=14,
 				 batch_size=12000,
 				 replay_buffer_capacity=12000,
 				 num_atoms=51,
 				 fc_layer_params=(2**6, 2**6),
 				 min_q_value=-1,
 				 max_q_value=1,
-				 n_step_update=6,
+				 n_step_update=18,
 				 gamma=0.92,
 				 epsilon_greedy=0.05,
-				 file_dir="./training"
+				 file_dir="./logs"
 				 ):
-		self.current_run = current_run
 		self.player_index = player_index
 		self.batch_size = batch_size
 		self.replay_buffer_capacity = replay_buffer_capacity
@@ -50,7 +50,8 @@ class FastAgent:
 			env_specs["env_observation_spec"],
 			action_spec=env_specs["env_action_spec"],
 			num_atoms=self.num_atoms,
-			fc_layer_params=self.fc_layer_params
+			fc_layer_params=self.fc_layer_params,
+			name="agent{}_network".format(player_index)
 		)
 
 		self.agent = categorical_dqn_agent.CategoricalDqnAgent(
@@ -95,7 +96,9 @@ class FastAgent:
 		# 	policy=self.agent.policy,
 		# 	max_to_keep=1)
 
-		self.writer = tf.compat.v2.summary.create_file_writer(self.file_dir + "/run{}".format(self.current_run) + "/agent" + str(player_index))
+		self.saver = PolicySaver(self.agent.policy)
+		self.log_dir = log_dir + "/agent" + str(player_index)
+		self.writer = tf.compat.v2.summary.create_file_writer(self.log_dir)
 
 	def write_summary(self, summaries, step):
 		with self.writer.as_default():
@@ -104,7 +107,11 @@ class FastAgent:
 			for summary_key in summaries["histograms"]:
 				tf.summary.histogram(name=summary_key, data=summaries["histograms"][summary_key], step=step.item(), buckets=len(summaries["histograms"][summary_key]))
 
-	def train(self):
-		exp, _ = next(self.iterator)
-		with self.writer.as_default():
-			return self.agent.train(exp)
+	def train(self, iterations):
+		print("Agent{} losses:".format(str(self.player_index)))
+		for j in range(iterations):
+			exp, _ = next(self.iterator)
+			with self.writer.as_default():
+				self.agent.train(exp)
+		self.saver.save(self.log_dir)
+
