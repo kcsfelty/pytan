@@ -157,8 +157,9 @@ class PyTanFast(PyEnvironment, ABC):
 			self.num_step / (end - self.episode_start),
 		))
 
-		for writer, player in zip(self.summary_list, self.player_list):
-			writer(player.get_episode_summaries(), self.global_step)
+		if self.summary_list:
+			for writer, player in zip(self.summary_list, self.player_list):
+				writer(player.get_episode_summaries(), self.global_step)
 
 		with self.writer.as_default():
 			tf.summary.scalar(name="turn_count", data=self.state.turn_number.item(), step=self.global_step.item())
