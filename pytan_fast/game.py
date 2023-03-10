@@ -150,7 +150,12 @@ class PyTanFast(PyEnvironment, ABC):
 
 	def end_game(self):
 		end = time.perf_counter()
-		print("Game finished: {} turns, {} steps, {} seconds".format(self.state.game_state_slices[df.turn_number].item(), self.num_step, end - self.episode_start))
+		print("Game finished: {} turns, {} steps, {} seconds, {} steps/sec".format(
+			self.state.game_state_slices[df.turn_number].item(),
+			self.num_step,
+			end - self.episode_start,
+			self.num_step / end - self.episode_start,
+		))
 
 		for writer, player in zip(self.summary_list, self.player_list):
 			writer(player.get_episode_summaries(), self.global_step)
