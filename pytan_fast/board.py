@@ -39,24 +39,24 @@ class Board:
 		self.tiles = [Tile(
 			key=tile,
 			index=self.tile_hash[tile],
-			has_robber=self.state.game_state_slices[tile_has_robber][self.tile_hash[tile]:self.tile_hash[tile]+1],
-			resource=self.state.game_state_slices[tile_resource][self.tile_hash[tile], :],
-			roll_number=self.state.game_state_slices[tile_roll_number][self.tile_hash[tile], :],
+			has_robber=self.state.tile_has_robber[self.tile_hash[tile]:self.tile_hash[tile]+1],
+			resource=self.state.tile_resource[self.tile_hash[tile], :],
+			roll_number=self.state.tile_roll_number[self.tile_hash[tile], :],
 		) for tile in self.tile_list]
 
 		self.vertices = [Vertex(
 			key=vertex,
 			index=self.vertex_hash[vertex],
-			settlement=self.state.game_state_slices[vertex_settlement][self.vertex_hash[vertex]:self.vertex_hash[vertex]+1],
-			city=self.state.game_state_slices[vertex_city][self.vertex_hash[vertex]:self.vertex_hash[vertex]+1],
-			is_open=self.state.game_state_slices[vertex_open][self.vertex_hash[vertex]:self.vertex_hash[vertex]+1],
-			port=self.state.game_state_slices[vertex_has_port][self.vertex_hash[vertex]]
+			settlement=self.state.vertex_settlement[self.vertex_hash[vertex]:self.vertex_hash[vertex]+1],
+			city=self.state.vertex_city[self.vertex_hash[vertex]:self.vertex_hash[vertex]+1],
+			is_open=self.state.vertex_open[self.vertex_hash[vertex]:self.vertex_hash[vertex]+1],
+			port=self.state.vertex_has_port[self.vertex_hash[vertex]]
 		) for vertex in self.vertex_list]
 
 		self.edges = [Edge(
 			key=edge,
 			index=self.edge_hash[edge],
-			is_open=self.state.game_state_slices[edge_open][self.edge_hash[edge]:self.edge_hash[edge]+1],
+			is_open=self.state.edge_open[self.edge_hash[edge]:self.edge_hash[edge]+1],
 		) for edge in self.edge_list]
 
 		# Connect adjacent geometries together

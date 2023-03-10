@@ -126,7 +126,7 @@ class Player:
 			self.game.largest_army_owner = self
 			self.change_victory_points(gs.largest_army_victory_points)
 			self.owns_largest_army.fill(1)
-			np.copyto(self.game.state.game_state_slices[df.largest_army_size], self.development_cards_played[gs.knight_index])
+			np.copyto(self.game.state.largest_army_size, self.development_cards_played[gs.knight_index])
 		else:
 			self.game.longest_road_owner = None
 			self.change_victory_points(-1 * gs.largest_army_victory_points)
@@ -148,11 +148,10 @@ class Player:
 			self.next_reward += victory_card_points
 			self.game.winning_player = self
 			self.next_reward += 1  # Always give at least one reward for a win
-			turn = self.game.state.game_state_slices[df.turn_number]
-			self.next_reward += 8 * 0.95 ** (turn - 30)
-			self.next_reward += 4 * 0.98 ** (turn - 30)
-			self.next_reward += 2 * 0.99 ** (turn - 30)
-			self.next_reward = min(self.next_reward, 10)
+			self.next_reward += 8 * 0.95 ** (self.game.state.turn_number - 30)
+			self.next_reward += 4 * 0.98 ** (self.game.state.turn_number - 30)
+			self.next_reward += 2 * 0.99 ** (self.game.state.turn_number - 30)
+			self.next_reward = min(int(self.next_reward), 10)
 			self.game.current_time_step_type = last_step_type
 			self.win_list.append(1)
 			for opponent in self.other_players:
@@ -214,10 +213,10 @@ class Player:
 			"settlements": self.settlement_count.item(),
 			"cities": self.city_count.item(),
 			"roads": self.road_count.item(),
-			"distribution_avg": np.sum(self.distribution_total).item() / self.game.state.game_state_slices[df.turn_number].item(),
-			"steal_avg": np.sum(self.steal_total).item() / self.game.state.game_state_slices[df.turn_number].item(),
-			"stolen_avg": np.sum(self.stolen_total).item() / self.game.state.game_state_slices[df.turn_number].item(),
-			"discard_avg": np.sum(self.discard_total).item() / self.game.state.game_state_slices[df.turn_number].item(),
+			"distribution_avg": np.sum(self.distribution_total).item() / self.game.state.turn_number.item(),
+			"steal_avg": np.sum(self.steal_total).item() / self.game.state.turn_number.item(),
+			"stolen_avg": np.sum(self.stolen_total).item() / self.game.state.turn_number.item(),
+			"discard_avg": np.sum(self.discard_total).item() / self.game.state.turn_number.item(),
 			"bank_trade_total": np.sum(self.bank_trade_total).item(),
 			"player_trade_total": np.sum(self.player_trade_total).item(),
 			"implicit_action_ratio": self.policy_action_count / self.implicit_action_count,
@@ -225,7 +224,7 @@ class Player:
 			"win_rate_50": self.win_rate(50)
 		}
 		if self.game.winning_player == self:
-			scalars["turn_count"] = self.game.state.game_state_slices[df.turn_number]
+			scalars["turn_count"] = self.game.state.turn_number
 		histograms = {
 			"action_count": self.action_count,
 		}

@@ -124,7 +124,7 @@ class PyTanFast(PyEnvironment, ABC):
 	def build_phase(self, player_order):
 		for build_player in player_order:
 			build_player.dynamic_mask.only(df.place_settlement)
-			np.logical_and(build_player.dynamic_mask.place_settlement, self.state.game_state_slices[df.vertex_open], out=build_player.dynamic_mask.place_settlement)
+			np.logical_and(build_player.dynamic_mask.place_settlement, self.state.vertex_open, out=build_player.dynamic_mask.place_settlement)
 			self.decide(build_player)
 			self.current_time_step_type = mid_step_type
 			self.decide(build_player)
@@ -139,10 +139,10 @@ class PyTanFast(PyEnvironment, ABC):
 
 		self.build_phase(player_order)
 		player_order.reverse()
-		self.state.game_state_slices[df.build_phase_reversed].fill(1)
+		self.state.build_phase_reversed.fill(1)
 		self.build_phase(player_order)
-		self.state.game_state_slices[df.build_phase].fill(0)
-		self.state.game_state_slices[df.build_phase_reversed].fill(0)
+		self.state.build_phase.fill(0)
+		self.state.build_phase_reversed.fill(0)
 		self.current_player = next(self.player_cycle)
 		self.current_player.dynamic_mask.only(df.roll_dice)
 		for player in self.player_list:
@@ -151,22 +151,17 @@ class PyTanFast(PyEnvironment, ABC):
 	def end_game(self):
 		end = time.perf_counter()
 		print("Game finished: {} turns, {} steps, {} seconds, {} steps/sec".format(
-			self.state.game_state_slices[df.turn_number].item(),
+			self.state.turn_number.item(),
 			self.num_step,
 			end - self.episode_start,
-			self.num_step / end - self.episode_start,
+			self.num_step / (end - self.episode_start),
 		))
 
 		for writer, player in zip(self.summary_list, self.player_list):
 			writer(player.get_episode_summaries(), self.global_step)
 
 		with self.writer.as_default():
-			tf.summary.scalar(name="turn_count", data=self.state.game_state_slices[df.turn_number].item(), step=self.global_step.item())
-			# game_name = "game_{}".format(self.episode_number)
-			# tf.summary.text(name=game_name, data="Steps/s: {}".format(int(self.num_step / (end - self.episode_start))), step=self.total_steps)
-			# tf.summary.text(name=game_name, data="Turns: {}".format(self.state.game_state_slices[df.turn_number].item()), step=self.total_steps)
-			# tf.summary.text(name=game_name, data="Steps: {}".format(str(self.num_step)), step=self.total_steps)
-			# tf.summary.text(name=game_name, data="Duration: {}s".format(str(end - self.episode_start)), step=self.total_steps)
+			tf.summary.scalar(name="turn_count", data=self.state.turn_number.item(), step=self.global_step.item())
 
 		self.episode_number += 1
 
@@ -184,12 +179,12 @@ class PyTanFast(PyEnvironment, ABC):
 		self.board.reset()
 		self.last_victory_points.fill(0)
 		self.development_card_stack = reverse_histogram(development_card_count_per_type)
-		self.state.game_state_slices[df.bank_development_card_count] += sum(development_card_count_per_type)
-		self.state.game_state_slices[df.bank_resources] += resource_card_count_per_type
-		self.state.game_state_slices[df.build_phase].fill(1)
+		self.state.bank_development_card_count += sum(development_card_count_per_type)
+		self.state.bank_resources += resource_card_count_per_type
+		self.state.build_phase.fill(1)
 		self.num_step = 0
-		self.state.game_state_slices[df.vertex_open].fill(1)
-		self.state.game_state_slices[df.edge_open].fill(1)
+		self.state.vertex_open.fill(1)
+		self.state.edge_open.fill(1)
 		self.player_cycle = None
 		self.current_player = None
 		self.winning_player = None
