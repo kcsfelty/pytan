@@ -132,7 +132,7 @@ class PyTanFast(PyEnvironment, ABC):
 
 	def start_game(self):
 		self._reset()
-		print("starting game, current steps this run:", self.total_steps)
+		# print("starting game, current steps this run:", self.total_steps)
 		self.episode_start = time.perf_counter()
 		player_order = random.sample(self.player_list, len(self.player_list))
 		self.player_cycle = cycle([x for x in player_order])
@@ -150,64 +150,18 @@ class PyTanFast(PyEnvironment, ABC):
 
 	def end_game(self):
 		end = time.perf_counter()
+		print("Game finished: {} turns, {} steps, {} seconds".format(self.state.game_state_slices[df.turn_number].item(), self.num_step, end - self.episode_start))
+
 		for writer, player in zip(self.summary_list, self.player_list):
 			writer(player.get_episode_summaries(), self.global_step)
 
 		with self.writer.as_default():
 			tf.summary.scalar(name="turn_count", data=self.state.game_state_slices[df.turn_number].item(), step=self.global_step.item())
-			game_name = "game_{}".format(self.episode_number)
-			# recap_data = [
-			# 	[str(int(player.actual_victory_points)).ljust(2) for player in self.player_list],
-			# 	[str(player.resource_cards).ljust(15) for player in self.player_list],
-			# 	[str(player.development_cards_played.tolist()).ljust(15) for player in self.player_list],
-			# 	[str(int(player.settlement_count)).ljust(3) for player in self.player_list],
-			# 	[str(int(player.city_count)).ljust(3) for player in self.player_list],
-			# 	[str(int(player.road_count)).ljust(3) for player in self.player_list],
-			# 	[str(player.development_cards_played[knight_index])+"+" if player.owns_largest_army else " " for player in self.player_list],
-			# 	[str(player.longest_road) + "+" if player.owns_longest_road else " " for player in self.player_list],
-			# 	[str(int(player.policy_action_count / (player.implicit_action_count + 1e-9) * 1e2)) for player in self.player_list],
-			# 	[player.episode_rewards for player in self.player_list],
-			# 	[player.victory_points.item() for player in self.player_list],
-			# 	[player.settlement_count.item() for player in self.player_list],
-			# 	[player.city_count.item() for player in self.player_list],
-			# 	[player.road_count.item() for player in self.player_list],
-			# 	[np.sum(player.distribution_total).item() / self.state.game_state_slices[df.turn_number].item() for player in self.player_list],
-			# 	[np.sum(player.steal_total).item() for player in self.player_list],
-			# 	[np.sum(player.stolen_total).item() for player in self.player_list],
-			# 	[np.sum(player.discard_total).item() / self.state.game_state_slices[df.turn_number].item() for player in self.player_list],
-			# 	[np.sum(player.bank_trade_total).item() for player in self.player_list],
-			# 	[np.sum(player.player_trade_total).item() for player in self.player_list],
-			# 	[player.policy_action_count / player.implicit_action_count for player in self.player_list],
-			# 	[player.longest_road / player.road_count.item() for player in self.player_list],
-			# ]
-			# recap_body = ""
-			# recap_body += "|".join(["", *["Agent{}".format(player.index) for player in self.player_list]]) + "\n"
-			# recap_body += "|:---|----:|----:|----:|" + "\n"
-			# recap_body += "\n".join(["|".join([str(x) for x in data_line]) for data_line in recap_data])
-			#
-			# recap_body = """
-			# 	### Markdown Text
-			#
-			# 	TensorBoard supports basic markdown syntax, including:
-			#
-			# 		preformatted code
-			#
-			# 	**bold text**
-			#
-			# 	| and | tables |
-			# 	| ---- | ---------- |
-			# 	| among | others |
-			# 	"""
-			#
-			# recap_body = np.array([str(x) for x in range(16)])
-			# recap_body = recap_body.reshape((4, 4))
-			# recap_body = tf.convert_to_tensor(recap_body)
-
-			# tf.summary.text(name=game_name, data=recap_body, step=self.total_steps)
-			tf.summary.text(name=game_name, data="Steps/s: {}".format(int(self.num_step / (end - self.episode_start))), step=self.total_steps)
-			tf.summary.text(name=game_name, data="Turns: {}".format(self.state.game_state_slices[df.turn_number].item()), step=self.total_steps)
-			tf.summary.text(name=game_name, data="Steps: {}".format(str(self.num_step)), step=self.total_steps)
-			tf.summary.text(name=game_name, data="Duration: {}s".format(str(end - self.episode_start)), step=self.total_steps)
+			# game_name = "game_{}".format(self.episode_number)
+			# tf.summary.text(name=game_name, data="Steps/s: {}".format(int(self.num_step / (end - self.episode_start))), step=self.total_steps)
+			# tf.summary.text(name=game_name, data="Turns: {}".format(self.state.game_state_slices[df.turn_number].item()), step=self.total_steps)
+			# tf.summary.text(name=game_name, data="Steps: {}".format(str(self.num_step)), step=self.total_steps)
+			# tf.summary.text(name=game_name, data="Duration: {}s".format(str(end - self.episode_start)), step=self.total_steps)
 
 		self.episode_number += 1
 
@@ -265,11 +219,16 @@ class PyTanFast(PyEnvironment, ABC):
 	def get_reward(self, player):
 		reward = player.next_reward
 		reward -= time_drain_reward
-		reward /= 2
+		# reward /= 2
 		player.episode_rewards += reward
 		player.next_reward = 0
 		return tf.convert_to_tensor(np.expand_dims(np.array(reward, dtype=np.double), axis=0), dtype=tf.float32)
 
 	def get_time_step(self, player):
 		return TimeStep(self.current_time_step_type, self.get_reward(player), self.get_discount(), self.get_observation(player))
+
+	def get_player_win_rate_order(self, n=50):
+		win_rates = [{"index": player.index, "win_rate": player.win_rate(n)} for player in self.player_list]
+		return [player_win_dict["index"] for player_win_dict in sorted(win_rates, key=lambda x: x["win_rate"], reverse=True)]
+
 

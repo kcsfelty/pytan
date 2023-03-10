@@ -19,15 +19,15 @@ class FastAgent:
 				 env_specs,
 				 player_index,
 				 log_dir,
-				 learning_rate=0.005,
+				 learning_rate=0.001,
 				 batch_size=12000,
 				 replay_buffer_capacity=12000,
-				 num_atoms=51,
+				 num_atoms=51 * 1,
 				 fc_layer_params=(2**6, 2**6),
-				 min_q_value=-1,
-				 max_q_value=1,
-				 n_step_update=18,
-				 gamma=0.92,
+				 min_q_value=0,
+				 max_q_value=10,
+				 n_step_update=20,
+				 gamma=0.98,
 				 epsilon_greedy=0.05,
 				 file_dir="./logs"
 				 ):
@@ -70,6 +70,7 @@ class FastAgent:
 			summarize_grads_and_vars=True
 		)
 
+		self.categorical_q_net.summary()
 		self.agent.initialize()
 
 		self.replay_buffer = tf_uniform_replay_buffer.TFUniformReplayBuffer(
@@ -113,5 +114,5 @@ class FastAgent:
 			exp, _ = next(self.iterator)
 			with self.writer.as_default():
 				self.agent.train(exp)
-		self.saver.save(self.log_dir)
+		# self.saver.save(self.log_dir)
 

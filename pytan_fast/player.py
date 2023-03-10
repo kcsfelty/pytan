@@ -73,6 +73,7 @@ class Player:
 		self.next_reward = 0
 		self.current_action_is_implicit = False
 		self.edge_proximity_vertices = []
+		self.win_list = []
 
 		# Diagnostics / Statistics
 		self.implicit_action_count = 0
@@ -146,9 +147,16 @@ class Player:
 			self.victory_points += victory_card_points
 			self.next_reward += victory_card_points
 			self.game.winning_player = self
-			self.next_reward += 1 + 3 * (0.998 ** self.game.num_step)
+			self.next_reward += 1  # Always give at least one reward for a win
+			turn = self.game.state.game_state_slices[df.turn_number]
+			self.next_reward += 8 * 0.95 ** (turn - 30)
+			self.next_reward += 4 * 0.98 ** (turn - 30)
+			self.next_reward += 2 * 0.99 ** (turn - 30)
+			self.next_reward = min(self.next_reward, 10)
 			self.game.current_time_step_type = last_step_type
+			self.win_list.append(1)
 			for opponent in self.other_players:
+				opponent.win_list.append(0)
 				opponent.development_cards_played[gs.victory_point_card_index] += opponent.development_cards[gs.victory_point_card_index]
 
 	def start_trajectory(self):
@@ -179,11 +187,6 @@ class Player:
 		np.logical_and(self.dynamic_mask.mask_slices[term], self.static_mask.mask_slices[term], out=self.dynamic_mask.mask_slices[term])
 
 	def calculate_longest_road(self):
-		# player_vertex_list = []
-		# for edge in self.edge_list:
-		# 	for touch_vertex in edge.vertices:
-		# 		if touch_vertex not in player_vertex_list:
-		# 			player_vertex_list.append(touch_vertex)
 		paths = []
 		for start_vertex in self.edge_proximity_vertices:
 			paths_from_this_node = []
@@ -204,6 +207,7 @@ class Player:
 		self.longest_road = len(max(paths, key=len))
 
 	def get_episode_summaries(self):
+
 		scalars = {
 			"episode_rewards": self.episode_rewards,
 			"victory_points": self.victory_points.item(),
@@ -211,14 +215,17 @@ class Player:
 			"cities": self.city_count.item(),
 			"roads": self.road_count.item(),
 			"distribution_avg": np.sum(self.distribution_total).item() / self.game.state.game_state_slices[df.turn_number].item(),
-			"steal_total": np.sum(self.steal_total).item(),
-			"stolen_total": np.sum(self.stolen_total).item(),
+			"steal_avg": np.sum(self.steal_total).item() / self.game.state.game_state_slices[df.turn_number].item(),
+			"stolen_avg": np.sum(self.stolen_total).item() / self.game.state.game_state_slices[df.turn_number].item(),
 			"discard_avg": np.sum(self.discard_total).item() / self.game.state.game_state_slices[df.turn_number].item(),
 			"bank_trade_total": np.sum(self.bank_trade_total).item(),
 			"player_trade_total": np.sum(self.player_trade_total).item(),
 			"implicit_action_ratio": self.policy_action_count / self.implicit_action_count,
 			"longest_road_per_road": self.longest_road / self.road_count.item(),
+			"win_rate_50": self.win_rate(50)
 		}
+		if self.game.winning_player == self:
+			scalars["turn_count"] = self.game.state.game_state_slices[df.turn_number]
 		histograms = {
 			"action_count": self.action_count,
 		}
@@ -226,3 +233,12 @@ class Player:
 			"scalars": scalars,
 			"histograms": histograms
 		}
+
+	def win_rate(self, n):
+		return self.avg_last_n(self.win_list, n)
+
+	def avg_last_n(self, values, n):
+		last_values = values[-n:]
+		if len(last_values) == 0:
+			return 0
+		return sum(last_values) / len(last_values)

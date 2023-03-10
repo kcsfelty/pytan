@@ -30,6 +30,28 @@ class State:
 		self.game_state_slices[df.tile_roll_number].shape = (gs.tile_count, gs.roll_number_count)
 		self.game_state_slices[df.vertex_has_port].shape = (gs.vertex_count, gs.port_type_count)
 
+		self.bank_development_card_count = self.game_state_slices[df.bank_development_card_count]
+		self.longest_road_length = self.game_state_slices[df.longest_road_length]
+		self.largest_army_size = self.game_state_slices[df.largest_army_size]
+		self.turn_number = self.game_state_slices[df.turn_number]
+		self.build_phase = self.game_state_slices[df.build_phase]
+		self.build_phase_reversed = self.game_state_slices[df.build_phase_reversed]
+		self.build_phase_placed_settlement = self.game_state_slices[df.build_phase_placed_settlement]
+		self.build_phase_placed_road = self.game_state_slices[df.build_phase_placed_road]
+		self.bought_development_card_count = self.game_state_slices[df.bought_development_card_count]
+		self.played_development_card_count = self.game_state_slices[df.played_development_card_count]
+		self.vertex_settlement = self.game_state_slices[df.vertex_settlement]
+		self.vertex_city = self.game_state_slices[df.vertex_city]
+		self.vertex_open = self.game_state_slices[df.vertex_open]
+		self.edge_open = self.game_state_slices[df.edge_open]
+		self.tile_has_robber = self.game_state_slices[df.tile_has_robber]
+		self.tile_resource = self.game_state_slices[df.tile_resource]
+		self.tile_roll_number = self.game_state_slices[df.tile_roll_number]
+		self.bank_resources = self.game_state_slices[df.bank_resources]
+		self.current_player_trade = self.game_state_slices[df.current_player_trade]
+		self.current_roll = self.game_state_slices[df.current_roll]
+		self.vertex_has_port = self.game_state_slices[df.vertex_has_port]
+
 		self.private_state_slices = []
 		for player_index in gs.player_list:
 			private_state_slice = {}
