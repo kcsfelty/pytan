@@ -1,10 +1,7 @@
-import cProfile
 import time
 
 import numpy as np
-from tf_agents.environments import tf_py_environment, tf_environment
-from tf_agents.policies import PolicySaver
-from tf_agents.policies.random_py_policy import RandomPyPolicy
+from tf_agents.environments import tf_py_environment
 from tf_agents.trajectories import PolicyStep
 
 from pytan_fast.agent import FastAgent

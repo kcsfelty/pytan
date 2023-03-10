@@ -241,7 +241,7 @@ class Handler:
 				# robbed_player.dynamic_mask.mask.fill(False)
 				robbed_player.dynamic_mask.only(df.discard)
 				self.check_discard_trades(robbed_player)
-				robbed_player.must_discard[:] = robbed_player.resource_card_count.item() // 2
+				robbed_player.must_discard += robbed_player.resource_card_count.item() // 2
 				for _ in range(robbed_player.must_discard):
 					self.game.immediate_play.insert(0, robbed_player)
 			else:
@@ -442,7 +442,7 @@ class Handler:
 		np.logical_or(player.port_access, vertex.port, out=player.port_access)
 		vertex.owned_by = player
 		vertex.settlement.fill(1)
-		player.owned_vertices[vertex.index][:] = 1
+		player.owned_vertices[vertex.index] = 1
 		for block_vertex in [vertex, *vertex.vertices]:
 			block_vertex.open.fill(0)
 			for block_player in self.game.player_list:
