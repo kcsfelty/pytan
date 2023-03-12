@@ -5,9 +5,10 @@ import tensorflow as tf
 import pytan_fast.definitions as df
 from pytan_fast.mask import Mask
 import pytan_fast.settings as gs
-from pytan_fast.action_mapping import action_mapping
 
 last_step_type = tf.convert_to_tensor(np.expand_dims(StepType.LAST, axis=0))
+
+policy_step_cache = [PolicyStep(action=tf.expand_dims(tf.convert_to_tensor(action_code, dtype=tf.int32), axis=0)) for action_code in range(379)]
 
 class Player:
 	def __repr__(self):
@@ -23,22 +24,21 @@ class Player:
 			"+" if self.owns_largest_army else " ",
 			self.longest_road,
 			"+" if self.owns_longest_road else " ",
-			# np.sum(self.dynamic_mask.mask),
 			str(int(self.policy_action_count / (self.implicit_action_count + 1e-9) * 1e2))
 		)
 
 	def __str__(self):
 		return self.__repr__()
 
-	def __init__(self, index, policy, observers, game, public_state, private_state):
+	def __init__(self, index, agent, game, public_state, private_state):
 		self.index = index
-		self.policy = policy
-		self.observers = observers
 		self.dynamic_mask = Mask()
 		self.static_mask = Mask()
 		self.game = game
 		self.private_state = private_state
 		self.public_state = public_state
+		self.agent = agent
+		self.policy = agent.get_policy() if self.agent else None
 		self.last_time_step = None
 		self.last_action = None
 
@@ -74,6 +74,8 @@ class Player:
 		self.current_action_is_implicit = False
 		self.edge_proximity_vertices = []
 		self.win_list = []
+		self.resource_tuple = tuple(self.resource_cards)
+		self.resource_port_tuple = tuple(self.resource_cards * self.port_access[:5])
 
 		# Diagnostics / Statistics
 		self.implicit_action_count = 0
@@ -110,6 +112,8 @@ class Player:
 		self.starting_distribution = np.zeros(gs.resource_type_count)
 		self.dynamic_mask = Mask()
 		self.static_mask = Mask()
+		self.resource_tuple = tuple(self.resource_cards)
+		self.resource_port_tuple = tuple(self.resource_cards * self.port_access[:5])
 
 	def set_longest_road(self, has=True):
 		if has:
@@ -148,9 +152,9 @@ class Player:
 			self.next_reward += victory_card_points
 			self.game.winning_player = self
 			self.next_reward += 1  # Always give at least one reward for a win
-			self.next_reward += 8 * 0.95 ** (self.game.state.turn_number - 30)
-			self.next_reward += 4 * 0.98 ** (self.game.state.turn_number - 30)
-			self.next_reward += 2 * 0.99 ** (self.game.state.turn_number - 30)
+			self.next_reward += 9 * 0.93 ** (self.game.state.turn_number - 20)
+			self.next_reward += 4 * 0.96 ** (self.game.state.turn_number - 20)
+			self.next_reward += 2 * 0.98 ** (self.game.state.turn_number - 20)
 			self.next_reward = min(int(self.next_reward), 10)
 			self.game.current_time_step_type = last_step_type
 			self.win_list.append(1)
@@ -161,12 +165,13 @@ class Player:
 	def start_trajectory(self):
 		self.last_time_step = self.game.get_time_step(self)
 		if np.sum(self.dynamic_mask.mask) == 1:
-			action_code = np.argmax(self.dynamic_mask.mask)
-			action_code = tf.convert_to_tensor(action_code, dtype=tf.int32)
-			action_code = tf.expand_dims(action_code, axis=0)
-			self.last_action = PolicyStep(action=action_code)
-			self.implicit_action_count += 1
+			# action_code = np.argmax(self.dynamic_mask.mask)
+			# action_code = tf.convert_to_tensor(action_code, dtype=tf.int32)
+			# action_code = tf.expand_dims(action_code, axis=0)
+			# self.last_action = PolicyStep(action=action_code)
 			self.current_action_is_implicit = True
+			self.last_action = policy_step_cache[np.argmax(self.dynamic_mask.mask)]
+			self.implicit_action_count += 1
 		else:
 			self.current_action_is_implicit = False
 			self.last_action = self.policy.action(self.last_time_step)
@@ -176,7 +181,7 @@ class Player:
 		if not self.current_action_is_implicit:
 			next_time_step = self.game.get_time_step(self)
 			traj = trajectories.from_transition(self.last_time_step, self.last_action, next_time_step)
-			for observer in self.observers:
+			for observer in self.agent.observers:
 				observer(traj)
 
 	def can_afford(self, trade):
@@ -224,7 +229,7 @@ class Player:
 			"win_rate_50": self.win_rate(50)
 		}
 		if self.game.winning_player == self:
-			scalars["turn_count"] = self.game.state.turn_number
+			scalars["turn_count"] = self.game.state.turn_number.item()
 		histograms = {
 			"action_count": self.action_count,
 		}
@@ -232,6 +237,9 @@ class Player:
 			"scalars": scalars,
 			"histograms": histograms
 		}
+
+	# def write_episode_summary(self):
+	# 	self.agent.writer(self.get_episode_summaries(), self.game.global_step)
 
 	def win_rate(self, n):
 		return self.avg_last_n(self.win_list, n)

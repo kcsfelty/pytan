@@ -19,7 +19,7 @@ class FastAgent:
 				 env_specs,
 				 player_index,
 				 log_dir,
-				 learning_rate=0.001,
+				 learning_rate=0.01,
 				 batch_size=12000,
 				 replay_buffer_capacity=12000,
 				 num_atoms=51 * 1,
@@ -27,9 +27,8 @@ class FastAgent:
 				 min_q_value=0,
 				 max_q_value=10,
 				 n_step_update=20,
-				 gamma=0.98,
-				 epsilon_greedy=0.05,
-				 file_dir="./logs"
+				 gamma=1.0,
+				 epsilon_greedy=0.01,
 				 ):
 		self.player_index = player_index
 		self.batch_size = batch_size
@@ -41,8 +40,8 @@ class FastAgent:
 		self.n_step_update = n_step_update
 		self.gamma = gamma
 		self.epsilon_greedy = epsilon_greedy
-		self.file_dir = file_dir
-		self.observers = [self.write_summary]
+		# self.observers = [self.write_summary]
+
 
 		self.train_step_counter = tf.Variable(0, dtype=tf.int64)
 
@@ -84,6 +83,7 @@ class FastAgent:
 			num_steps=self.n_step_update + 1).prefetch(3)
 
 		self.iterator = iter(self.dataset)
+		self.observers = [self.replay_buffer.add_batch]
 
 		# self._train_checkpointer = common.Checkpointer(
 		# 	ckpt_dir="./training/agent" + str(player_index) + "/train",
@@ -101,6 +101,11 @@ class FastAgent:
 		self.log_dir = log_dir + "/agent" + str(player_index)
 		self.writer = tf.compat.v2.summary.create_file_writer(self.log_dir)
 
+	def get_policy(self, collect=True):
+		if collect:
+			return self.agent.collect_policy
+		return self.agent.policy
+
 	def write_summary(self, summaries, step):
 		with self.writer.as_default():
 			for summary_key in summaries["scalars"]:
@@ -109,7 +114,7 @@ class FastAgent:
 				tf.summary.histogram(name=summary_key, data=summaries["histograms"][summary_key], step=step.item(), buckets=len(summaries["histograms"][summary_key]))
 
 	def train(self, iterations):
-		print("Agent{} losses:".format(str(self.player_index)))
+		print("Training Agent{}".format(str(self.player_index)))
 		for j in range(iterations):
 			exp, _ = next(self.iterator)
 			with self.writer.as_default():

@@ -7,7 +7,7 @@ from itertools import cycle
 import numpy as np
 import tensorflow as tf
 from tf_agents.environments import PyEnvironment
-from tf_agents.specs import array_spec
+from tf_agents.specs import array_spec, BoundedTensorSpec, BoundedArraySpec
 from tf_agents.trajectories import TimeStep, StepType
 from tf_agents.typing import types
 
@@ -15,6 +15,7 @@ import pytan_fast.definitions as df
 from pytan_fast.board import Board
 from pytan_fast.handler import Handler
 from pytan_fast.player import Player
+from pytan_fast.random_agent import RandomAgent
 from pytan_fast.settings import player_count, development_card_count_per_type, resource_card_count_per_type, knight_index
 from pytan_fast.states.state import State
 from util.Dice import Dice
@@ -38,12 +39,19 @@ last_step_type = tf.convert_to_tensor(np.expand_dims(StepType.LAST, axis=0))
 
 
 class PyTanFast(PyEnvironment, ABC):
-	def __init__(self, policy_list, observer_list, summary_list, global_step, log_dir="./training", victory_point_limit=10):
+	def __init__(self, agent_list=None, global_step=None, log_dir="./training", victory_point_limit=10):
 		super().__init__()
-		self.global_step = global_step
+
+		# Summaries
+		self.log_dir = log_dir + "/game"
+		self.episode_number = 0
+		self.writer = tf.compat.v2.summary.create_file_writer(self.log_dir)
+
+		# Environment
+		self.global_step = global_step or np.zeros(1, dtype=np.int64)
 		self.state = State()
 		self.board = Board(self.state, self)
-		self.summary_list = summary_list
+		self.agent_list = agent_list or [None] * 3
 		self.player_list = None
 		self.victory_point_limit = victory_point_limit
 
@@ -51,16 +59,15 @@ class PyTanFast(PyEnvironment, ABC):
 			self.player_list = [Player(
 				index=player_index,
 				game=self,
-				policy=policy_list[player_index],
-				observers=observer_list[player_index],
+				agent=self.agent_list[player_index],
 				private_state=self.state.private_state_slices[player_index],
 				public_state=self.state.public_state_slices[player_index],
 			) for player_index in range(player_count)]
 
-		for player in self.player_list:
-			for other_player in self.player_list:
-				if player is not other_player:
-					player.other_players.append(other_player)
+			for player in self.player_list:
+				for other_player in self.player_list:
+					if player is not other_player:
+						player.other_players.append(other_player)
 
 		self.handler = Handler(self)
 		self.immediate_play = []
@@ -76,7 +83,6 @@ class PyTanFast(PyEnvironment, ABC):
 		self.winning_player = None
 		self.current_time_step_type = first_step_type
 		self.total_steps = 0
-		self.episode_start = None
 
 		# Game logic helpers
 		self.development_card_stack = []
@@ -86,29 +92,21 @@ class PyTanFast(PyEnvironment, ABC):
 		self.player_trades_this_turn = 0
 		self.resolve_road_building_count = 0
 		self.max_victory_points = 0
+		self.bank_resource_tuple = tuple(self.state.bank_resources)
 
-		# Summaries
-		self.log_dir = log_dir + "/game"
-		self.episode_number = 0
-		self.writer = tf.compat.v2.summary.create_file_writer(self.log_dir)
-
-		self._reset()
-
-		self._action_spec = array_spec.BoundedArraySpec(shape=(), dtype=np.int32, minimum=0, maximum=379 - 1, name='action'),
+		self._action_spec = BoundedArraySpec(shape=(), dtype=np.int32, minimum=0, maximum=379 - 1, name='action'),
 
 		self._observation_spec = (
-			array_spec.BoundedArraySpec(shape=(len(self.state.for_player(0)),), dtype=np.int32, minimum=0, name='observation'),
-			array_spec.BoundedArraySpec(shape=(379,), dtype=np.int32, minimum=0, maximum=1, name='action_mask'))
+			BoundedArraySpec(shape=(len(self.state.for_player(0)),), dtype=np.int32, minimum=0, maximum=128, name='observation'),
+			BoundedArraySpec(shape=(379,), dtype=np.int32, minimum=0, maximum=1, name='action_mask'))
 
-	def run(self, step_limit=200):
+	def run(self, step_limit=600):
 		self.total_steps = 0
-		self.start_game()
 		while self.total_steps < step_limit:
 			self.decide(self.immediate_play.pop(0) if self.immediate_play else self.current_player)
 			if self.winning_player:
 				self.end_game()
-				self.start_game()
-		self._reset()
+				self._reset()
 		return self.total_steps
 
 	def decide(self, active_player):
@@ -131,9 +129,6 @@ class PyTanFast(PyEnvironment, ABC):
 			build_player.dynamic_mask.only(df.no_action)
 
 	def start_game(self):
-		self._reset()
-		# print("starting game, current steps this run:", self.total_steps)
-		self.episode_start = time.perf_counter()
 		player_order = random.sample(self.player_list, len(self.player_list))
 		self.player_cycle = cycle([x for x in player_order])
 
@@ -149,22 +144,16 @@ class PyTanFast(PyEnvironment, ABC):
 			player.static_mask.buy_development_card.fill(1)
 
 	def end_game(self):
-		end = time.perf_counter()
-		print("Game finished: {} turns, {} steps, {} seconds, {} steps/sec".format(
-			self.state.turn_number.item(),
-			self.num_step,
-			end - self.episode_start,
-			self.num_step / (end - self.episode_start),
-		))
+		for player in self.player_list:
+			player.agent.write_summary(player.get_episode_summaries(), self.global_step)
+		self.write_episode_summary()
+		self.episode_number += 1
 
-		if self.summary_list:
-			for writer, player in zip(self.summary_list, self.player_list):
-				writer(player.get_episode_summaries(), self.global_step)
+	def write_episode_summary(self):
+		print("Game finished: {} turns, {} steps".format(self.state.turn_number.item(), self.num_step,), self.winning_player)
 
 		with self.writer.as_default():
 			tf.summary.scalar(name="turn_count", data=self.state.turn_number.item(), step=self.global_step.item())
-
-		self.episode_number += 1
 
 	def action_spec(self) -> types.NestedArraySpec:
 		return self._action_spec
@@ -197,12 +186,14 @@ class PyTanFast(PyEnvironment, ABC):
 		self.current_time_step_type = first_step_type
 		self.immediate_play = []
 		self.max_victory_points = 0
-		self.episode_start = None
+		self.bank_resource_tuple = tuple(self.state.bank_resources)
 
 		for player in self.player_list: player.reset()
 		for tile in self.board.tiles: tile.reset()
 		for vertex in self.board.vertices: vertex.reset()
 		for edge in self.board.edges: edge.reset()
+
+		self.start_game()
 
 	def get_observation(self, player):
 		obs = np.expand_dims(self.state.for_player(player.index), axis=0)
@@ -214,6 +205,7 @@ class PyTanFast(PyEnvironment, ABC):
 	def get_discount(self, exp_scale=2, offset=3):
 		result = 1. - ((self.max_victory_points - offset) / self.victory_point_limit) ** exp_scale
 		result = np.expand_dims(result, axis=0)
+		# result = np.expand_dims(0.96, axis=0)
 		result = tf.convert_to_tensor(result, dtype=tf.float32)
 		return result
 
@@ -232,4 +224,14 @@ class PyTanFast(PyEnvironment, ABC):
 		win_rates = [{"index": player.index, "win_rate": player.win_rate(n)} for player in self.player_list]
 		return [player_win_dict["index"] for player_win_dict in sorted(win_rates, key=lambda x: x["win_rate"], reverse=True)]
 
-
+	# def get_random_agent_list(self):
+	# 	env_specs = {
+	# 		"env_observation_spec": self.observation_spec,
+	# 		"env_action_spec": self.action_spec,
+	# 		"env_time_step_spec": self.time_step_spec,
+	# 	}
+	# 	return [RandomAgent(
+	# 		env_specs=env_specs,
+	# 		player_index=player_index,
+	# 		log_dir=self.log_dir
+	# 	) for player_index in range(player_count)]
