@@ -19,14 +19,14 @@ class FastAgent:
 				 env_specs,
 				 player_index,
 				 log_dir,
-				 learning_rate=0.01,
+				 learning_rate=1,
 				 batch_size=12000,
 				 replay_buffer_capacity=12000,
 				 num_atoms=51 * 1,
-				 fc_layer_params=(2**6, 2**6),
+				 fc_layer_params=(2**5, 2**5),
 				 min_q_value=0,
 				 max_q_value=10,
-				 n_step_update=20,
+				 n_step_update=1,
 				 gamma=1.0,
 				 epsilon_greedy=0.01,
 				 ):
@@ -114,10 +114,10 @@ class FastAgent:
 				tf.summary.histogram(name=summary_key, data=summaries["histograms"][summary_key], step=step.item(), buckets=len(summaries["histograms"][summary_key]))
 
 	def train(self, iterations):
-		print("Training Agent{}".format(str(self.player_index)))
 		for j in range(iterations):
 			exp, _ = next(self.iterator)
 			with self.writer.as_default():
 				self.agent.train(exp)
+		# self.replay_buffer.clear()
 		# self.saver.save(self.log_dir)
 

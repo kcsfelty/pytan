@@ -48,7 +48,7 @@ class PyTanFast(PyEnvironment, ABC):
 		self.writer = tf.compat.v2.summary.create_file_writer(self.log_dir)
 
 		# Environment
-		self.global_step = global_step or np.zeros(1, dtype=np.int64)
+		self.global_step = global_step
 		self.state = State()
 		self.board = Board(self.state, self)
 		self.agent_list = agent_list or [None] * 3
@@ -204,6 +204,7 @@ class PyTanFast(PyEnvironment, ABC):
 
 	def get_discount(self, exp_scale=2, offset=3):
 		result = 1. - ((self.max_victory_points - offset) / self.victory_point_limit) ** exp_scale
+		# result = 0.90
 		result = np.expand_dims(result, axis=0)
 		# result = np.expand_dims(0.96, axis=0)
 		result = tf.convert_to_tensor(result, dtype=tf.float32)

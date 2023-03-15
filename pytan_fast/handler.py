@@ -18,6 +18,19 @@ no_cost = np.zeros(5)
 max_cards = np.zeros(5)
 max_cards.fill(-19)
 
+
+class CachedBankTrades:
+	def __init__(self, bank_resources):
+		self.cache = {}
+		self.bank_resources = bank_resources
+		self.bank_trades, self.general_port_trades, self.resource_port_trades, self.player_trades, self.year_of_plenty_trades, self.discard_trades = get_trades()
+		self.bank_trades_lookup_bank = get_trade_lookup(self.bank_trades * -1)
+		self.general_port_trades_lookup_bank = get_trade_lookup(self.general_port_trades * -1)
+		self.resource_port_trades_lookup_bank = get_trade_lookup(self.resource_port_trades * -1)
+
+	def get_trades(self):
+		pass
+
 class Handler:
 	def __init__(self, game, log_action=False):
 		self.game = game
@@ -64,25 +77,28 @@ class Handler:
 		]
 
 	def check_bank_trades(self, player):
-		# resource_tuple = tuple(player.resource_cards)
-		player_can_afford = self.bank_trades_lookup[player.resource_tuple]
-		# bank_resource_tuple = tuple(self.game.state.bank_resources)
-		bank_can_afford = self.bank_trades_lookup_bank[self.game.bank_resource_tuple]
+		resource_tuple = tuple(player.resource_cards)
+		player_can_afford = self.bank_trades_lookup[resource_tuple]
+		# player_can_afford = self.bank_trades_lookup[player.resource_tuple]
+		bank_resource_tuple = tuple(self.game.state.bank_resources)
+		bank_can_afford = self.bank_trades_lookup_bank[bank_resource_tuple]
 		np.copyto(player.dynamic_mask.mask_slices[df.bank_trade], np.logical_and(player_can_afford, bank_can_afford))
 
 	def check_general_port_trades(self, player):
 		if player.port_access[5]:
-			# resource_tuple = tuple(player.resource_cards)
-			player_can_afford = self.bank_trades_lookup[player.resource_tuple]
-			# bank_resource_tuple = tuple(self.game.state.bank_resources)
-			bank_can_afford = self.general_port_trades_lookup_bank[self.game.bank_resource_tuple]
+			resource_tuple = tuple(player.resource_cards)
+			player_can_afford = self.general_port_trades_lookup[resource_tuple]
+			# player_can_afford = self.general_port_trades_lookup[player.resource_tuple]
+			bank_resource_tuple = tuple(self.game.state.bank_resources)
+			bank_can_afford = self.general_port_trades_lookup_bank[bank_resource_tuple]
 			np.copyto(player.dynamic_mask.mask_slices[df.general_port_trade], np.logical_and(player_can_afford, bank_can_afford))
 
 	def check_resource_port_trades(self, player):
-		# resource_tuple = tuple(player.resource_cards * player.port_access[:5])
-		player_can_afford = self.resource_port_trades_lookup[player.resource_port_tuple]
-		# bank_resource_tuple = tuple(self.game.state.bank_resources)
-		bank_can_afford = self.resource_port_trades_lookup_bank[self.game.bank_resource_tuple]
+		resource_tuple = tuple(player.resource_cards * player.port_access[:5])
+		player_can_afford = self.resource_port_trades_lookup[resource_tuple]
+		# player_can_afford = self.resource_port_trades_lookup[player.resource_port_tuple]
+		bank_resource_tuple = tuple(self.game.state.bank_resources)
+		bank_can_afford = self.resource_port_trades_lookup_bank[bank_resource_tuple]
 		np.copyto(player.dynamic_mask.mask_slices[df.resource_port_trade], np.logical_and(player_can_afford, bank_can_afford))
 
 	def check_player_trades(self, player):
@@ -197,22 +213,25 @@ class Handler:
 		return log_string
 
 	def handle_end_turn(self, _, player):
-		next_player = next(self.game.player_cycle)
-		self.game.current_player = next_player
+		# Reset the current player to non-active status
 		player.current_player.fill(False)
 		player.development_cards += player.development_card_bought_this_turn
 		player.development_card_count += np.sum(player.development_card_bought_this_turn)
 		player.development_card_bought_this_turn.fill(0)
 		player.dynamic_mask.only(df.no_action)
+
+		# Reset helper fields
 		self.game.player_trades_this_turn = 0
 		self.game.state.turn_number += 1
+		self.game.state.bought_development_card_count.fill(0)
+		self.game.state.played_development_card_count.fill(0)
+
+		# Set next player to be current player
+		next_player = next(self.game.player_cycle)
 		self.game.current_player = next_player
 		next_player.current_player.fill(True)
 		next_player.dynamic_mask.only(df.roll_dice)
 		self.check_player_play_development_card(next_player)
-		self.game.state.bought_development_card_count.fill(0)
-		self.game.state.played_development_card_count.fill(0)
-
 
 		# assert self.game.current_player is player
 		# self.game.current_player.current_player[:] = False
@@ -295,7 +314,7 @@ class Handler:
 		player.resource_cards += trade
 		# self.game.state.game_state_slices[df.bank_resources] -= trade
 		self.game.state.bank_resources -= trade
-		player.resource_card_count = np.sum(player.resource_cards)
+		player.resource_card_count.fill(int(np.sum(player.resource_cards)))
 		player.resource_tuple = tuple(player.resource_cards)
 		player.resource_port_tuple = tuple(player.resource_cards * player.port_access[:5])
 		self.game.bank_resource_tuple = tuple(self.game.state.bank_resources)
