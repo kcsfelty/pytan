@@ -8,12 +8,12 @@ def splitter(obs_tuple):
 
 
 class RandomAgent:
-	def __init__(self, env_specs, player_index, log_dir):
+	def __init__(self, env_specs, player_index, log_dir, observers=None):
 		self.env_specs = env_specs
 		self.player_index = player_index
 		self.log_dir = log_dir
 		self.writer = tf.compat.v2.summary.create_file_writer(log_dir + "/agent" + str(self.player_index))
-		self.observers = []
+		self.observers = observers or []
 		self.policy = RandomTFPolicy(
 			time_step_spec=env_specs["env_time_step_spec"],
 			action_spec=env_specs["env_action_spec"],

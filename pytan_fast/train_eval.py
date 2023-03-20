@@ -1,7 +1,11 @@
+import os
 import time
 
 import numpy as np
+import tensorflow as tf
 from tf_agents.environments import tf_py_environment
+from tf_agents.replay_buffers import tf_uniform_replay_buffer
+from tf_agents.utils import common
 
 from pytan_fast.agent import FastAgent
 from pytan_fast.game import PyTanFast
@@ -57,8 +61,10 @@ def train_eval(
 		log_dir="./logs/{}".format(int(time.time())),
 		total_steps=4000000,
 		init_steps=None,
-		batch_size=250,
+		batch_size=32,
 		train_steps=1,
+		replay_buffer_scaling=5,
+		warmup_steps=3000,
 	):
 	steps_per_iteration = int(batch_size * train_steps)
 	iterations = int(total_steps / steps_per_iteration)
@@ -130,11 +136,12 @@ def train_eval(
 			player_index=i,
 			batch_size=batch_size,
 			log_dir=log_dir,
-			replay_buffer_capacity=batch_size * train_steps,
-			fc_layer_params=(2 ** 6, 2 ** 6, 2 ** 6),
-			learning_rate=0.1,
+			replay_buffer_capacity=100000,
+			fc_layer_params=(2 ** 7, 2 ** 6),
+			learning_rate=0.001,
 			# learning_rate=1/(batch_size * train_steps * 2),
 			epsilon_greedy=epsilon_greedy(i),
+			n_step_update=5,
 			# epsilon_greedy=eps_base,
 			env_specs=env_specs)
 		for i in range(player_count)]
@@ -150,19 +157,82 @@ def train_eval(
 
 	env = PyTanFast(agent_list, global_step, log_dir)
 	env.reset()
-
+	if warmup_steps:
+		env.run(step_limit=warmup_steps * step_scaling)
 	for i in range(iterations):
 		start = time.perf_counter()
 		env.run(step_limit=steps_per_iteration * step_scaling)
 		for agent in agent_list:
 			agent.train(train_steps)
 		end = time.perf_counter()
-		print("Iteration took", int(end - start), "s", "steps/sec:",
-			  int((steps_per_iteration * step_scaling) / (end - start)))
+		print("Iteration took", int(end - start), "s", "steps/sec:", int((steps_per_iteration * step_scaling) / (end - start)))
 		if global_step >= 50000:
 			eps_base = 0.05
 			eps_scaling = eps_place_scaling[env.get_player_win_rate_order(50)]
 		# print(eps_scaling)
+
+
+def build_random_experience_dataset(
+		env_specs,
+		log_dir="./logs/{}".format(int(time.time())),
+		rb_dir="./rb/{}".format(int(time.time())),
+		total_steps=1000000,
+		rb_capacity=1000000,
+		n_step_update=12,
+		batch_size=64,
+		save_interval=10000,
+		step_scaling=1 / 0.35
+	):
+
+	init_agent = FastAgent(
+		player_index=0,
+		batch_size=batch_size,
+		log_dir=log_dir,
+		replay_buffer_capacity=rb_capacity,
+		n_step_update=n_step_update,
+		env_specs=env_specs)
+
+	replay_buffer = tf_uniform_replay_buffer.TFUniformReplayBuffer(
+		data_spec=init_agent.agent.collect_data_spec,
+		batch_size=1,
+		max_length=rb_capacity)
+
+	# dataset = replay_buffer.as_dataset(
+	# 	sample_batch_size=batch_size,
+	# 	num_steps=n_step_update + 1)
+
+	random_agent_list = [RandomAgent(
+		env_specs=env_specs,
+		player_index=player_index,
+		log_dir=log_dir,
+		observers=[replay_buffer.add_batch]
+	) for player_index in range(player_count)]
+
+	global_step = np.zeros(1, dtype=np.int64)
+	env = PyTanFast(random_agent_list, global_step, log_dir)
+	env.reset()
+	checkpoint_args = {
+		"directory": rb_dir,
+		"max_to_keep": 1000
+	}
+	rb_checkpointer = common.Checkpointer(
+		ckpt_dir=os.path.join(rb_dir, 'replay_buffer'),
+		max_to_keep=1,
+		replay_buffer=replay_buffer)
+
+	while global_step < total_steps:
+		print(replay_buffer.num_frames())
+		start = time.perf_counter()
+		env.run(save_interval * step_scaling)
+		end = time.perf_counter()
+		interval = end - start
+		step_rate = (save_interval * step_scaling) / interval
+		print("Iteration took", int(interval), "s", "steps/sec:", int(step_rate))
+		rb_checkpointer.save(global_step=tf.convert_to_tensor(global_step, dtype=tf.int32))
+		# new_data = dataset.take(100000)
+		# new_data.save(path=rb_dir, checkpoint_args=checkpoint_args)
+
+
 
 if __name__ == "__main__":
 	_env = PyTanFast()
@@ -172,4 +242,5 @@ if __name__ == "__main__":
 		"env_action_spec": train_env.action_spec()[0],
 		"env_time_step_spec": train_env.time_step_spec(),
 	}
-	train_eval(env_specs)
+	# train_eval(env_specs)
+	build_random_experience_dataset(env_specs)

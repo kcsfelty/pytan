@@ -19,13 +19,13 @@ class FastAgent:
 				 env_specs,
 				 player_index,
 				 log_dir,
-				 learning_rate=1,
-				 batch_size=12000,
-				 replay_buffer_capacity=12000,
+				 learning_rate=0.001,
+				 batch_size=1,
+				 replay_buffer_capacity=1,
 				 num_atoms=51 * 1,
 				 fc_layer_params=(2**5, 2**5),
 				 min_q_value=0,
-				 max_q_value=10,
+				 max_q_value=100,
 				 n_step_update=1,
 				 gamma=1.0,
 				 epsilon_greedy=0.01,
@@ -66,10 +66,11 @@ class FastAgent:
 			epsilon_greedy=self.epsilon_greedy,
 			observation_and_action_constraint_splitter=splitter,
 			train_step_counter=self.train_step_counter,
-			summarize_grads_and_vars=True
+			summarize_grads_and_vars=True,
+			debug_summaries=True,
 		)
 
-		self.categorical_q_net.summary()
+		# self.categorical_q_net.summary()
 		self.agent.initialize()
 
 		self.replay_buffer = tf_uniform_replay_buffer.TFUniformReplayBuffer(

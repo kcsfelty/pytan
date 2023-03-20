@@ -64,6 +64,9 @@ class Player:
 		self.resource_cards = self.private_state[df.resource_type_count]
 		self.development_cards = self.private_state[df.development_type_count]
 		self.development_card_bought_this_turn = self.private_state[df.development_type_bought_count]
+		self.settlement_indices = self.public_state[df.settlement_indices]
+		self.city_indices = self.public_state[df.city_indices]
+		self.road_indices = self.public_state[df.road_indices]
 
 		# Helper fields
 		self.edge_list = []
@@ -116,6 +119,7 @@ class Player:
 		self.resource_port_tuple = tuple(self.resource_cards * self.port_access[:5])
 
 	def set_longest_road(self, has=True):
+		self.game.state.owns_longest_road_index = self.index
 		if has:
 			self.game.longest_road_owner = self
 			self.change_victory_points(gs.longest_road_victory_points)
@@ -126,6 +130,7 @@ class Player:
 			self.owns_longest_road.fill(0)
 
 	def largest_army(self, has=True):
+		self.game.state.owns_largest_army_index = self.index
 		if has:
 			self.game.largest_army_owner = self
 			self.change_victory_points(gs.largest_army_victory_points)

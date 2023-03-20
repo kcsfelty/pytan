@@ -182,9 +182,22 @@ class Handler:
 		action = action_step.action.numpy()[0]
 		callback, args = self.action_lookup[action]
 		callback(args, player)
+
+		# if self.game.num_step % 1000 == 0:
+		# 	print(player)
+		# 	for term, value in zip(self.game.state.observation_terms, self.game.state.for_player(player.index)):
+		# 		print(term, value)
+
+		# 	for term in self.game.state.game_state_slices.keys() - self.game.state.extra_game_state.keys():
+		# 		print(term, self.game.state.game_state_slices[term])
+		# 	for player_slice in self.game.state.public_state_slices:
+		# 		for term in player_slice - self.game.state.extra_public_state.keys():
+		# 			print(term, player_slice[term])
+		# 	for i in self.game.state.state.shape:
+		# 		print(self.game.state.state[i])
 		# if self.log_action:
 		# 	print(self.log_actions(action, callback, args, player))
-		# player.action_count.append(action)
+		player.action_count.append(action)
 
 		# assert player.can_afford(no_cost), self.log_actions(action, callback, args, player)
 		# assert player.road_count <= 15, self.log_actions(action, callback, args, player)
@@ -228,6 +241,7 @@ class Handler:
 
 		# Set next player to be current player
 		next_player = next(self.game.player_cycle)
+		self.game.state.current_player_index.fill(next_player.index)
 		self.game.current_player = next_player
 		next_player.current_player.fill(True)
 		next_player.dynamic_mask.only(df.roll_dice)
@@ -248,6 +262,7 @@ class Handler:
 		roll = roll or self.game.dice.roll()
 		self.game.state.current_roll.fill(0)
 		self.game.state.current_roll[roll] = 1
+		self.game.state.current_roll_index.fill(roll)
 		# self.game.state.game_state_slices[df.current_roll][roll].fill(1)
 		if roll == gs.robber_activation_roll:
 			self.handle_robber_roll(player)
@@ -281,6 +296,8 @@ class Handler:
 				robbed_player.dynamic_mask.only(df.no_action)
 		if not some_player_discards:
 			player.dynamic_mask.only(df.move_robber)
+			player.must_move_robber.fill(1)
+			self.game.state.must_move_robber_index.fill(player.index)
 			self.game.immediate_play.append(player)
 
 	def handle_player_trade(self, player_from, player_to, trade):
@@ -328,6 +345,8 @@ class Handler:
 	def handle_offer_player_trade(self, trade, player):
 		self.game.player_trades_this_turn += 1
 		player.dynamic_mask.only(df.cancel_player_trade)
+		player.offering_trade.fill(True)
+		self.game.state.offering_trade_index.fill(player.index)
 		for opponent in player.other_players:
 			opponent.dynamic_mask.only(df.decline_player_trade)
 			if opponent.can_afford(trade * -1):
@@ -350,6 +369,7 @@ class Handler:
 	def handle_cancel_player_trade(self, _, player):
 		self.game.trading_player = None
 		player.offering_trade.fill(0)
+		self.game.state.offering_trade_index.fill(-1)
 		for opponent in player.other_players:
 			opponent.accepted_trade.fill(0)
 			opponent.declined_trade.fill(0)
@@ -364,9 +384,11 @@ class Handler:
 
 	def handle_move_robber(self, tile, player):
 		player.must_move_robber.fill(0)
+		self.game.state.must_move_robber_index.fill(-1)
 		self.game.board.robbed_tile.has_robber.fill(False)
 		self.game.board.robbed_tile = tile
 		self.game.board.robbed_tile.has_robber.fill(True)
+		self.game.state.tile_has_robber_index.fill(tile.index)
 		player.dynamic_mask.only(df.rob_player)
 		players_to_rob = 0
 		for rob_player in player.other_players:
@@ -399,12 +421,26 @@ class Handler:
 		if len(self.game.immediate_play) == 0:
 			self.game.immediate_play.append(self.game.current_player)
 			self.game.current_player.dynamic_mask.only(df.move_robber)
+			self.game.current_player.must_move_robber.fill(1)
+			self.game.state.must_move_robber_index.fill(self.game.current_player.index)
 
 	def handle_place_city(self, vertex, player):
 		if player.city_count == gs.max_city_count:
+			print(player)
+			print("Tried to build too many cities")
 			player.dynamic_mask.cannot(df.place_city)
 			player.static_mask.cannot(df.place_city)
 			return
+		player.city_indices[int(player.city_count)] = vertex.index
+		next_settlement_indices = player.settlement_indices[(player.settlement_indices != -1) & (player.settlement_indices != vertex.index)]
+		filler = np.zeros(gs.max_settlement_count)
+		filler.fill(-1)
+		# next_settlement_indices[:] = np.hstack([next_settlement_indices, filler])[:5]
+		# next_settlement_indices.resize(gs.resource_type_count)
+		player.settlement_indices[:] = np.hstack([next_settlement_indices, filler])[:5]
+		# print(vertex, vertex.index)
+		# print(player.city_indices)
+		# print(player.settlement_indices)
 		self.handle_bank_trade(gs.city_cost, player)
 		player.city_count += 1
 		player.settlement_count -= 1
@@ -418,6 +454,7 @@ class Handler:
 		self.set_post_roll_mask(player)
 
 	def handle_place_road(self, edge, player):
+		player.road_indices[int(player.road_count)] = edge.index
 		if player.road_count == gs.max_road_count:
 			player.dynamic_mask.cannot(df.place_road)
 			player.static_mask.cannot(df.place_road)
@@ -467,6 +504,10 @@ class Handler:
 					player.set_longest_road(True)
 
 	def handle_place_settlement(self, vertex, player):
+		player.settlement_indices[int(player.settlement_count)] = vertex.index
+		# print(vertex, vertex.index)
+		# print(player.city_indices)
+		# print(player.settlement_indices)
 		if player.settlement_count == gs.max_settlement_count:
 			player.dynamic_mask.cannot(df.place_settlement)
 			return

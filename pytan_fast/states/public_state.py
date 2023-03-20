@@ -23,3 +23,20 @@ public_state_degrees = {
 	edge_owned: cs.edge_count,
 	port_access: cs.port_type_count,
 }
+
+public_state_degrees_condensed = {
+	must_discard: 1,
+	victory_points: 1,
+	resource_card_count: 1,
+	development_card_count: 1,
+	longest_road: 1,
+	accepted_trade: 1,
+	declined_trade: 1,
+	development_cards_played: cs.development_type_count,
+	port_access: cs.port_type_count,
+
+	# Compact state
+	settlement_indices: cs.max_settlement_count,
+	road_indices: cs.max_road_count,
+	city_indices: cs.max_city_count,
+}

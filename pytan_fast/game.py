@@ -39,7 +39,7 @@ last_step_type = tf.convert_to_tensor(np.expand_dims(StepType.LAST, axis=0))
 
 
 class PyTanFast(PyEnvironment, ABC):
-	def __init__(self, agent_list=None, global_step=None, log_dir="./training", victory_point_limit=10):
+	def __init__(self, agent_list=None, global_step=None, log_dir="./training", victory_point_limit=10, condensed_state=False):
 		super().__init__()
 
 		# Summaries
@@ -49,7 +49,8 @@ class PyTanFast(PyEnvironment, ABC):
 
 		# Environment
 		self.global_step = global_step
-		self.state = State()
+		self.condensed_state = condensed_state
+		self.state = State(self.condensed_state)
 		self.board = Board(self.state, self)
 		self.agent_list = agent_list or [None] * 3
 		self.player_list = None
@@ -213,7 +214,7 @@ class PyTanFast(PyEnvironment, ABC):
 	def get_reward(self, player):
 		reward = player.next_reward
 		reward -= time_drain_reward
-		# reward /= 2
+		reward *= 10
 		player.episode_rewards += reward
 		player.next_reward = 0
 		return tf.convert_to_tensor(np.expand_dims(np.array(reward, dtype=np.double), axis=0), dtype=tf.float32)

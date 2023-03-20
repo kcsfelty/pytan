@@ -101,19 +101,23 @@ class Board:
 		tile_roll_number_count = reverse_histogram([x for x in settings.tile_roll_number_count_per_type])
 		tile_roll_number_count.insert(tile_resource_count.index(desert_index), -1)
 		self.roll_hash = [[] for _ in gs.roll_list]
+		self.game.state.tile_resource_index[:] = tile_resource_count
+		self.game.state.tile_roll_number_index[:] = tile_roll_number_count
 		for tile, resource_index, roll_index in zip(self.tiles, tile_resource_count, tile_roll_number_count):
 			if roll_index != -1:
-				tile.resource[resource_index].fill(1)
-				tile.roll_number[roll_index].fill(1)
+				tile.resource[resource_index] = 1
+				tile.roll_number[roll_index] = 1
 				tile.resource_index = resource_index
 				self.roll_hash[roll_index].append(tile)
 			else:
 				tile.has_robber.fill(1)
+				self.game.state.tile_has_robber_index.fill(tile.index)
 				self.robbed_tile = tile
 
 		port_type_count = reverse_histogram([x for x in settings.port_type_count_per_type])
 		port_vertex_groups = [(self.vertex_hash[port_a], self.vertex_hash[port_b]) for port_a, port_b in settings.port_vertex_groups]
+		self.game.state.port_resource_index[:] = port_type_count
 		for vertices, port_type in zip(port_vertex_groups, port_type_count):
 			vertex_a, vertex_b = vertices
-			self.vertices[vertex_a].port[port_type].fill(1)
-			self.vertices[vertex_b].port[port_type].fill(1)
+			self.vertices[vertex_a].port[port_type] = 1
+			self.vertices[vertex_b].port[port_type] = 1
