@@ -19,11 +19,11 @@ def train_eval(
 		total_steps=100000000,
 
 		# Training / Experience
-		batch_size=500,
+		batch_size=250,
 		replay_buffer_capacity=10000,
 
 		# Hyperparameters
-		fc_layer_params=(2**8, 2**6),
+		fc_layer_params=(2**6, 2**5),
 		learning_rate=0.001,
 		n_step_update=5,
 
