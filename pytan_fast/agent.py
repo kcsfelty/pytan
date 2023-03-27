@@ -32,8 +32,8 @@ class FastAgent:
 				 n_step_update=1,
 				 gamma=1.0,
 				 epsilon_greedy=None,
-				 eps_min=0.05,
-				 eps_start=0.20,
+				 eps_min=0.025,
+				 eps_start=0.30,
 				 eps_decay_rate=0.9999,
 				 checkpoint_dir="checkpoints",
 				 checkpoint_interval=10000,
@@ -50,7 +50,7 @@ class FastAgent:
 		self.gamma = gamma
 		self.epsilon_greedy = epsilon_greedy
 		self.agent_prefix = "agent{}".format(str(player_index))
-		self.train_interval = self.batch_size
+		self.train_interval = train_interval
 		self.checkpoint_interval = checkpoint_interval
 		self.global_step = global_step
 		self.eval_interval = eval_interval

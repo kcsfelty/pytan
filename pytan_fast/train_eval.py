@@ -19,18 +19,18 @@ def train_eval(
 		total_steps=100000000,
 
 		# Training / Experience
-		batch_size=2500,
+		batch_size=64,
 		replay_buffer_capacity=10000,
 
 		# Hyperparameters
-		fc_layer_params=(2**10, 2**10, 2**10),
+		fc_layer_params=(2**7, 2**6),
 		learning_rate=0.001,
-		n_step_update=20,
+		n_step_update=50,
 
 		# Intervals
 		eval_interval=35000,
-		train_interval=1,
-		checkpoint_interval=10000,
+		train_interval=5,
+		checkpoint_interval=25000,
 	):
 	global_step = tf.Variable(0, trainable=False, dtype=tf.int64)
 	global_step_checkpointer = common.Checkpointer(
@@ -126,12 +126,12 @@ if __name__ == "__main__":
 		"env_time_step_spec": train_env.time_step_spec(),
 	}
 
-	policy_half_life_steps = 15000
+	policy_half_life_steps = 5000
 	decay_rate = np.log(2) / policy_half_life_steps
 
 	train_eval(
 		env_specs=_env_specs,
 		learning_rate=decay_rate,
 		eval_interval=policy_half_life_steps * 7,
-		replay_buffer_capacity=policy_half_life_steps * 2,
+		replay_buffer_capacity=policy_half_life_steps * 5,
 	)
