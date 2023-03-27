@@ -5,6 +5,7 @@ import tensorflow as tf
 from tf_agents.agents.categorical_dqn import categorical_dqn_agent
 from tf_agents.networks import categorical_q_network
 from tf_agents.policies import PolicySaver
+from tf_agents.policies.random_tf_policy import RandomTFPolicy
 from tf_agents.replay_buffers import tf_uniform_replay_buffer
 from tf_agents.utils import common
 
@@ -19,17 +20,25 @@ class FastAgent:
 				 env_specs,
 				 player_index,
 				 log_dir,
+				 global_step,
+				 train_interval=1,
 				 learning_rate=0.001,
 				 batch_size=1,
-				 replay_buffer_capacity=1,
+				 replay_buffer_capacity=1000,
 				 num_atoms=51 * 1,
 				 fc_layer_params=(2**5, 2**5),
 				 min_q_value=0,
-				 max_q_value=100,
+				 max_q_value=10,
 				 n_step_update=1,
 				 gamma=1.0,
-				 epsilon_greedy=0.01,
-				 ):
+				 epsilon_greedy=None,
+				 eps_min=0.05,
+				 eps_start=0.20,
+				 eps_decay_rate=0.9999,
+				 checkpoint_dir="checkpoints",
+				 checkpoint_interval=10000,
+				 eval_interval=10000,
+		 ):
 		self.player_index = player_index
 		self.batch_size = batch_size
 		self.replay_buffer_capacity = replay_buffer_capacity
@@ -40,18 +49,26 @@ class FastAgent:
 		self.n_step_update = n_step_update
 		self.gamma = gamma
 		self.epsilon_greedy = epsilon_greedy
-		# self.observers = [self.write_summary]
-
+		self.agent_prefix = "agent{}".format(str(player_index))
+		self.train_interval = self.batch_size
+		self.checkpoint_interval = checkpoint_interval
+		self.global_step = global_step
+		self.eval_interval = eval_interval
+		self.eps_min = eps_min
+		self.eps_start = eps_start
+		self.eps_decay_rate = eps_decay_rate
+		self.eps_cof = 1.
+		self.epsilon = self.eps_start + self.eps_min
 
 		self.train_step_counter = tf.Variable(0, dtype=tf.int64)
+		self.step_counter = tf.Variable(0, dtype=tf.int64)
 
 		self.categorical_q_net = categorical_q_network.CategoricalQNetwork(
 			env_specs["env_observation_spec"],
 			action_spec=env_specs["env_action_spec"],
 			num_atoms=self.num_atoms,
 			fc_layer_params=self.fc_layer_params,
-			name="agent{}_network".format(player_index)
-		)
+			name=self.agent_prefix + "_network")
 
 		self.agent = categorical_dqn_agent.CategoricalDqnAgent(
 			time_step_spec=env_specs["env_time_step_spec"],
@@ -63,12 +80,11 @@ class FastAgent:
 			n_step_update=self.n_step_update,
 			td_errors_loss_fn=common.element_wise_huber_loss,
 			gamma=self.gamma,
-			epsilon_greedy=self.epsilon_greedy,
+			epsilon_greedy=self.epsilon_greedy or self.get_epsilon,
 			observation_and_action_constraint_splitter=splitter,
 			train_step_counter=self.train_step_counter,
 			summarize_grads_and_vars=True,
-			debug_summaries=True,
-		)
+			debug_summaries=True,)
 
 		# self.categorical_q_net.summary()
 		self.agent.initialize()
@@ -84,41 +100,73 @@ class FastAgent:
 			num_steps=self.n_step_update + 1).prefetch(3)
 
 		self.iterator = iter(self.dataset)
-		self.observers = [self.replay_buffer.add_batch]
+		self.observers = [self.add_step]
 
-		# self._train_checkpointer = common.Checkpointer(
-		# 	ckpt_dir="./training/agent" + str(player_index) + "/train",
-		# 	agent=self.agent,
-		# 	global_step=self.write_count,
-		# 	metrics=metric_utils.MetricsGroup(self.train_metrics, 'train_metrics'),
-		# 	max_to_keep=1)
+		self.checkpointer = common.Checkpointer(
+			ckpt_dir=os.path.join(checkpoint_dir, self.agent_prefix),
+			max_to_keep=1,
+			policy=self.agent.policy,
+			replay_buffer=self.replay_buffer,
+			train_step_counter=self.train_step_counter,
+			step_counter=self.step_counter)
 
-		# self._policy_checkpointer = common.Checkpointer(
-		# 	ckpt_dir=os.path.join("./training/agent" + str(player_index), 'policy'),
-		# 	policy=self.agent.policy,
-		# 	max_to_keep=1)
+		self.checkpointer.initialize_or_restore()
 
-		self.saver = PolicySaver(self.agent.policy)
-		self.log_dir = log_dir + "/agent" + str(player_index)
-		self.writer = tf.compat.v2.summary.create_file_writer(self.log_dir)
+		self.log_dir = log_dir
+		self.writer = tf.compat.v2.summary.create_file_writer(os.path.join(self.log_dir, self.agent_prefix))
 
-	def get_policy(self, collect=True):
+	def get_epsilon(self):
+		return self.epsilon
+
+	def update_epsilon(self):
+		if self.replay_buffer.num_frames() < self.replay_buffer_capacity:
+			self.epsilon = 1.
+		self.eps_cof *= self.eps_decay_rate
+		self.epsilon = self.eps_min + self.eps_cof * self.eps_start
+
+	def add_step(self, step):
+		self.replay_buffer.add_batch(step)
+		self.step_counter.assign_add(1)
+		self.update_epsilon()
+
+		if self.replay_buffer.num_frames() == self.replay_buffer_capacity:
+			if self.step_counter.numpy() % self.train_interval == 0:
+				self.train()
+
+		if self.step_counter.numpy() % self.checkpoint_interval == 0:
+			print("Checkpointing", self.agent_prefix, "current eps:", self.epsilon)
+			self.checkpoint()
+
+		if self.step_counter.numpy() % self.eval_interval == 0:
+			print("Evaluating", self.agent_prefix)
+			self.eval()
+
+	def act(self, time_step, collect=True):
 		if collect:
-			return self.agent.collect_policy
-		return self.agent.policy
+			return self.agent.collect_policy.action(time_step)
+		return self.agent.policy.action(time_step)
 
 	def write_summary(self, summaries, step):
 		with self.writer.as_default():
 			for summary_key in summaries["scalars"]:
-				tf.summary.scalar(name=summary_key, data=summaries["scalars"][summary_key], step=step.item())
+				tf.summary.scalar(
+					name=summary_key,
+					data=summaries["scalars"][summary_key],
+					step=step.numpy().item())
 			for summary_key in summaries["histograms"]:
-				tf.summary.histogram(name=summary_key, data=summaries["histograms"][summary_key], step=step.item(), buckets=len(summaries["histograms"][summary_key]))
+				tf.summary.histogram(
+					name=summary_key,
+					data=summaries["histograms"][summary_key],
+					step=step.numpy().item(),
+					buckets=len(summaries["histograms"][summary_key]))
 
-	def train(self, iterations):
-		for j in range(iterations):
-			exp, _ = next(self.iterator)
-			with self.writer.as_default():
-				self.agent.train(exp)
-		# self.replay_buffer.clear()
-		# self.saver.save(self.log_dir)
+	def train(self):
+		exp, _ = next(self.iterator)
+		with self.writer.as_default():
+			self.agent.train(exp)
 
+	def checkpoint(self):
+		self.checkpointer.save(global_step=self.global_step.numpy().item())
+
+	def eval(self):
+		pass

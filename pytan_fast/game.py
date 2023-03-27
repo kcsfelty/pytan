@@ -7,7 +7,7 @@ from itertools import cycle
 import numpy as np
 import tensorflow as tf
 from tf_agents.environments import PyEnvironment
-from tf_agents.specs import array_spec, BoundedTensorSpec, BoundedArraySpec
+from tf_agents.specs import BoundedArraySpec
 from tf_agents.trajectories import TimeStep, StepType
 from tf_agents.typing import types
 
@@ -15,14 +15,13 @@ import pytan_fast.definitions as df
 from pytan_fast.board import Board
 from pytan_fast.handler import Handler
 from pytan_fast.player import Player
-from pytan_fast.random_agent import RandomAgent
-from pytan_fast.settings import player_count, development_card_count_per_type, resource_card_count_per_type, knight_index
+from pytan_fast.settings import player_count, development_card_count_per_type, resource_card_count_per_type
 from pytan_fast.states.state import State
 from util.Dice import Dice
 
 rng = np.random.default_rng()
 
-expected_steps = 9999
+expected_steps = 1800
 overall_point_reduction = 10
 time_drain_reward = overall_point_reduction / expected_steps
 
@@ -39,7 +38,7 @@ last_step_type = tf.convert_to_tensor(np.expand_dims(StepType.LAST, axis=0))
 
 
 class PyTanFast(PyEnvironment, ABC):
-	def __init__(self, agent_list=None, global_step=None, log_dir="./training", victory_point_limit=10, condensed_state=False):
+	def __init__(self, agent_list=None, global_step=None, log_dir="./logs", victory_point_limit=10, condensed_state=False):
 		super().__init__()
 
 		# Summaries
@@ -101,19 +100,22 @@ class PyTanFast(PyEnvironment, ABC):
 			BoundedArraySpec(shape=(len(self.state.for_player(0)),), dtype=np.int32, minimum=0, maximum=128, name='observation'),
 			BoundedArraySpec(shape=(379,), dtype=np.int32, minimum=0, maximum=1, name='action_mask'))
 
+	def walk(self):
+		self.decide(self.immediate_play.pop(0) if self.immediate_play else self.current_player)
+		if self.winning_player:
+			self.end_game()
+			self._reset()
+
 	def run(self, step_limit=600):
 		self.total_steps = 0
 		while self.total_steps < step_limit:
-			self.decide(self.immediate_play.pop(0) if self.immediate_play else self.current_player)
-			if self.winning_player:
-				self.end_game()
-				self._reset()
+			self.walk()
 		return self.total_steps
 
 	def decide(self, active_player):
 		self.num_step += 1
 		self.total_steps += 1
-		self.global_step += 1
+		self.global_step.assign_add(1)
 		for player in self.player_list:
 			player.start_trajectory()
 		self.handler.handle_action(active_player.last_action, active_player)
@@ -151,10 +153,20 @@ class PyTanFast(PyEnvironment, ABC):
 		self.episode_number += 1
 
 	def write_episode_summary(self):
-		print("Game finished: {} turns, {} steps".format(self.state.turn_number.item(), self.num_step,), self.winning_player)
+		summary = ""
+		summary += "Game finished"
+		summary += str(self.state.turn_number.item()).rjust(5)
+		summary += " turns, "
+		summary += str(self.num_step).rjust(6)
+		summary += ", "
+		summary += str(self.winning_player)
+		print(summary)
 
 		with self.writer.as_default():
-			tf.summary.scalar(name="turn_count", data=self.state.turn_number.item(), step=self.global_step.item())
+			tf.summary.scalar(
+				name="turn_count",
+				data=self.state.turn_number.item(),
+				step=self.global_step.numpy().item())
 
 	def action_spec(self) -> types.NestedArraySpec:
 		return self._action_spec
@@ -203,18 +215,17 @@ class PyTanFast(PyEnvironment, ABC):
 		mask = tf.convert_to_tensor(mask, dtype=tf.int32)
 		return obs, mask
 
-	def get_discount(self, exp_scale=2, offset=3):
-		result = 1. - ((self.max_victory_points - offset) / self.victory_point_limit) ** exp_scale
-		# result = 0.90
+	def get_discount(self, exp_scale=2, offset=6):
+		# result = 1. - ((self.max_victory_points - offset) / self.victory_point_limit) ** exp_scale
+		result = 0.95
 		result = np.expand_dims(result, axis=0)
-		# result = np.expand_dims(0.96, axis=0)
 		result = tf.convert_to_tensor(result, dtype=tf.float32)
 		return result
 
 	def get_reward(self, player):
 		reward = player.next_reward
 		reward -= time_drain_reward
-		reward *= 10
+		reward *= 1
 		player.episode_rewards += reward
 		player.next_reward = 0
 		return tf.convert_to_tensor(np.expand_dims(np.array(reward, dtype=np.double), axis=0), dtype=tf.float32)
@@ -225,15 +236,3 @@ class PyTanFast(PyEnvironment, ABC):
 	def get_player_win_rate_order(self, n=50):
 		win_rates = [{"index": player.index, "win_rate": player.win_rate(n)} for player in self.player_list]
 		return [player_win_dict["index"] for player_win_dict in sorted(win_rates, key=lambda x: x["win_rate"], reverse=True)]
-
-	# def get_random_agent_list(self):
-	# 	env_specs = {
-	# 		"env_observation_spec": self.observation_spec,
-	# 		"env_action_spec": self.action_spec,
-	# 		"env_time_step_spec": self.time_step_spec,
-	# 	}
-	# 	return [RandomAgent(
-	# 		env_specs=env_specs,
-	# 		player_index=player_index,
-	# 		log_dir=self.log_dir
-	# 	) for player_index in range(player_count)]

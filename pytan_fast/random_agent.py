@@ -19,8 +19,8 @@ class RandomAgent:
 			action_spec=env_specs["env_action_spec"],
 			observation_and_action_constraint_splitter=splitter)
 
-	def get_policy(self, collect=True):
-		return self.policy
+	def act(self, time_stamp):
+		return self.policy.action(time_stamp)
 
 	def write_summary(self, summaries, step):
 		with self.writer.as_default():
@@ -28,10 +28,10 @@ class RandomAgent:
 				tf.summary.scalar(
 					name=summary_key,
 					data=summaries["scalars"][summary_key],
-					step=step.item())
+					step=step.numpy().item())
 			for summary_key in summaries["histograms"]:
 				tf.summary.histogram(
 					name=summary_key,
 					data=summaries["histograms"][summary_key],
-					step=step.item(),
+					step=step.numpy().item(),
 					buckets=len(summaries["histograms"][summary_key]))

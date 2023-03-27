@@ -20,9 +20,9 @@ class Player:
 			str(int(self.settlement_count)).ljust(3),
 			str(int(self.city_count)).ljust(3),
 			str(int(self.road_count)).ljust(3),
-			self.development_cards_played[gs.knight_index],
+			str(self.development_cards_played[gs.knight_index]).rjust(2),
 			"+" if self.owns_largest_army else " ",
-			self.longest_road,
+			str(self.longest_road).rjust(2),
 			"+" if self.owns_longest_road else " ",
 			str(int(self.policy_action_count / (self.implicit_action_count + 1e-9) * 1e2))
 		)
@@ -38,7 +38,7 @@ class Player:
 		self.private_state = private_state
 		self.public_state = public_state
 		self.agent = agent
-		self.policy = agent.get_policy() if self.agent else None
+		# self.policy = agent.get_policy() if self.agent else None
 		self.last_time_step = None
 		self.last_action = None
 
@@ -157,33 +157,30 @@ class Player:
 			self.next_reward += victory_card_points
 			self.game.winning_player = self
 			self.next_reward += 1  # Always give at least one reward for a win
-			self.next_reward += 9 * 0.93 ** (self.game.state.turn_number - 20)
-			self.next_reward += 4 * 0.96 ** (self.game.state.turn_number - 20)
-			self.next_reward += 2 * 0.98 ** (self.game.state.turn_number - 20)
-			self.next_reward = min(int(self.next_reward), 10)
+			self.next_reward += 9 * (1 - np.log(2) / 15) ** (self.game.state.turn_number - 40)
+			self.next_reward = min(float(self.next_reward), 10)
 			self.game.current_time_step_type = last_step_type
 			self.win_list.append(1)
 			for opponent in self.other_players:
 				opponent.win_list.append(0)
 				opponent.development_cards_played[gs.victory_point_card_index] += opponent.development_cards[gs.victory_point_card_index]
+				opponent.last_action = policy_step_cache[-1]
+				opponent.next_reward -= 5
+				opponent.end_trajectory(True)
 
 	def start_trajectory(self):
 		self.last_time_step = self.game.get_time_step(self)
 		if np.sum(self.dynamic_mask.mask) == 1:
-			# action_code = np.argmax(self.dynamic_mask.mask)
-			# action_code = tf.convert_to_tensor(action_code, dtype=tf.int32)
-			# action_code = tf.expand_dims(action_code, axis=0)
-			# self.last_action = PolicyStep(action=action_code)
 			self.current_action_is_implicit = True
 			self.last_action = policy_step_cache[np.argmax(self.dynamic_mask.mask)]
 			self.implicit_action_count += 1
 		else:
 			self.current_action_is_implicit = False
-			self.last_action = self.policy.action(self.last_time_step)
+			self.last_action = self.agent.act(self.last_time_step)
 			self.policy_action_count += 1
 
-	def end_trajectory(self):
-		if not self.current_action_is_implicit:
+	def end_trajectory(self, force_log=False):
+		if not self.current_action_is_implicit or force_log:
 			next_time_step = self.game.get_time_step(self)
 			traj = trajectories.from_transition(self.last_time_step, self.last_action, next_time_step)
 			for observer in self.agent.observers:

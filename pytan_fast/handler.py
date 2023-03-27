@@ -19,18 +19,6 @@ max_cards = np.zeros(5)
 max_cards.fill(-19)
 
 
-class CachedBankTrades:
-	def __init__(self, bank_resources):
-		self.cache = {}
-		self.bank_resources = bank_resources
-		self.bank_trades, self.general_port_trades, self.resource_port_trades, self.player_trades, self.year_of_plenty_trades, self.discard_trades = get_trades()
-		self.bank_trades_lookup_bank = get_trade_lookup(self.bank_trades * -1)
-		self.general_port_trades_lookup_bank = get_trade_lookup(self.general_port_trades * -1)
-		self.resource_port_trades_lookup_bank = get_trade_lookup(self.resource_port_trades * -1)
-
-	def get_trades(self):
-		pass
-
 class Handler:
 	def __init__(self, game, log_action=False):
 		self.game = game
@@ -79,7 +67,6 @@ class Handler:
 	def check_bank_trades(self, player):
 		resource_tuple = tuple(player.resource_cards)
 		player_can_afford = self.bank_trades_lookup[resource_tuple]
-		# player_can_afford = self.bank_trades_lookup[player.resource_tuple]
 		bank_resource_tuple = tuple(self.game.state.bank_resources)
 		bank_can_afford = self.bank_trades_lookup_bank[bank_resource_tuple]
 		np.copyto(player.dynamic_mask.mask_slices[df.bank_trade], np.logical_and(player_can_afford, bank_can_afford))
@@ -88,7 +75,6 @@ class Handler:
 		if player.port_access[5]:
 			resource_tuple = tuple(player.resource_cards)
 			player_can_afford = self.general_port_trades_lookup[resource_tuple]
-			# player_can_afford = self.general_port_trades_lookup[player.resource_tuple]
 			bank_resource_tuple = tuple(self.game.state.bank_resources)
 			bank_can_afford = self.general_port_trades_lookup_bank[bank_resource_tuple]
 			np.copyto(player.dynamic_mask.mask_slices[df.general_port_trade], np.logical_and(player_can_afford, bank_can_afford))
@@ -96,18 +82,15 @@ class Handler:
 	def check_resource_port_trades(self, player):
 		resource_tuple = tuple(player.resource_cards * player.port_access[:5])
 		player_can_afford = self.resource_port_trades_lookup[resource_tuple]
-		# player_can_afford = self.resource_port_trades_lookup[player.resource_port_tuple]
 		bank_resource_tuple = tuple(self.game.state.bank_resources)
 		bank_can_afford = self.resource_port_trades_lookup_bank[bank_resource_tuple]
 		np.copyto(player.dynamic_mask.mask_slices[df.resource_port_trade], np.logical_and(player_can_afford, bank_can_afford))
 
 	def check_player_trades(self, player):
 		if self.game.player_trades_this_turn is not gs.player_trade_per_turn_limit:
-			# resource_tuple = tuple(player.resource_cards)
 			np.copyto(player.dynamic_mask.mask_slices[df.offer_player_trade], self.player_trades_lookup[player.resource_tuple])
 
 	def check_discard_trades(self, player):
-		# resource_tuple = tuple(player.resource_cards)
 		np.copyto(player.dynamic_mask.mask_slices[df.discard], self.discard_trades_lookup[player.resource_tuple])
 
 	def check_player_purchase(self, player):
@@ -117,26 +100,22 @@ class Handler:
 		self.check_buy_development_card(player)
 
 	def check_place_road(self, player):
-		# player.dynamic_mask.mask_slices[df.place_road].fill(player.can_afford(gs.road_cost))
 		if player.can_afford(gs.road_cost):
 			player.dynamic_mask.place_road.fill(True)
 			player.apply_static(df.place_road)
 
 	def check_place_settlement(self, player):
 		if player.can_afford(gs.settlement_cost) and player.settlement_count < gs.max_settlement_count:
-			# player.dynamic_mask.mask_slices[df.place_settlement].fill(True)
 			player.dynamic_mask.place_settlement.fill(True)
 			player.apply_static(df.place_settlement)
 
 	def check_place_city(self, player):
 		if player.can_afford(gs.city_cost):
-			# player.dynamic_mask.mask_slices[df.place_city].fill(True)
 			player.dynamic_mask.place_city.fill(True)
 			player.apply_static(df.place_city)
 
 	def check_buy_development_card(self, player):
 		if player.can_afford(gs.development_card_cost) and len(self.game.development_card_stack) > 0:
-			# player.dynamic_mask.mask_slices[df.buy_development_card].fill(True)
 			player.dynamic_mask.buy_development_card.fill(True)
 			player.apply_static(df.buy_development_card)
 
@@ -150,11 +129,6 @@ class Handler:
 				player.dynamic_mask.play_road_building.fill(True)
 			if player.development_cards[gs.year_of_plenty_index] > 0:
 				player.dynamic_mask.play_year_of_plenty.fill(True)
-
-			# player.dynamic_mask.mask_slices[df.play_knight].fill(player.development_cards[gs.knight_index] > 0)
-			# player.dynamic_mask.mask_slices[df.play_monopoly].fill(player.development_cards[gs.monopoly_index] > 0)
-			# player.dynamic_mask.mask_slices[df.play_road_building].fill(player.development_cards[gs.road_building_index] > 0)
-			# player.dynamic_mask.mask_slices[df.play_year_of_plenty].fill(player.development_cards[gs.year_of_plenty_index] > 0)
 
 	def check_bank_can_disburse(self, trade):
 		single_recipient = np.where(np.sum(np.where(trade, 1, 0), axis=0) == 1, True, False)
@@ -182,33 +156,9 @@ class Handler:
 		action = action_step.action.numpy()[0]
 		callback, args = self.action_lookup[action]
 		callback(args, player)
-
-		# if self.game.num_step % 1000 == 0:
-		# 	print(player)
-		# 	for term, value in zip(self.game.state.observation_terms, self.game.state.for_player(player.index)):
-		# 		print(term, value)
-
-		# 	for term in self.game.state.game_state_slices.keys() - self.game.state.extra_game_state.keys():
-		# 		print(term, self.game.state.game_state_slices[term])
-		# 	for player_slice in self.game.state.public_state_slices:
-		# 		for term in player_slice - self.game.state.extra_public_state.keys():
-		# 			print(term, player_slice[term])
-		# 	for i in self.game.state.state.shape:
-		# 		print(self.game.state.state[i])
-		# if self.log_action:
-		# 	print(self.log_actions(action, callback, args, player))
 		player.action_count.append(action)
 
-		# assert player.can_afford(no_cost), self.log_actions(action, callback, args, player)
-		# assert player.road_count <= 15, self.log_actions(action, callback, args, player)
-		# assert player.road_count >= 0, self.log_actions(action, callback, args, player)
-		# assert player.settlement_count <= 5, self.log_actions(action, callback, args, player)
-		# assert player.settlement_count >= 0, self.log_actions(action, callback, args, player)
-		# assert player.city_count <= 4, self.log_actions(action, callback, args, player)
-		# assert player.city_count >= 0, self.log_actions(action, callback, args, player)
-		# assert player.development_card_count >= 0, self.log_actions(action, callback, args, player)
-
-	def log_actions(self, action, callback, args, player):
+	def log_actions(self, callback, args, player):
 		log_string = ""
 		log_string += str(self.game.num_step).ljust(6)
 		log_string += str(np.sum(player.dynamic_mask.mask_slices[df.place_settlement])).ljust(3)
@@ -247,23 +197,11 @@ class Handler:
 		next_player.dynamic_mask.only(df.roll_dice)
 		self.check_player_play_development_card(next_player)
 
-		# assert self.game.current_player is player
-		# self.game.current_player.current_player[:] = False
-		# self.game.current_player.development_cards += self.game.current_player.development_card_bought_this_turn
-		# self.game.current_player.development_card_count += np.sum(self.game.current_player.development_card_bought_this_turn)
-		# self.game.current_player.development_card_bought_this_turn[:] = 0
-		# self.game.current_player.dynamic_mask.only(df.no_action)
-		#
-		# self.game.state.bought_development_card_count[:] = 0
-		# self.game.state.played_development_card_count[:] = 0
-
-
 	def handle_roll_dice(self, roll, player):
 		roll = roll or self.game.dice.roll()
 		self.game.state.current_roll.fill(0)
 		self.game.state.current_roll[roll] = 1
 		self.game.state.current_roll_index.fill(roll)
-		# self.game.state.game_state_slices[df.current_roll][roll].fill(1)
 		if roll == gs.robber_activation_roll:
 			self.handle_robber_roll(player)
 			return
@@ -286,7 +224,6 @@ class Handler:
 		for robbed_player in self.game.player_list:
 			if robbed_player.resource_card_count > gs.rob_player_above_card_count:
 				some_player_discards = True
-				# robbed_player.dynamic_mask.mask.fill(False)
 				robbed_player.dynamic_mask.only(df.discard)
 				self.check_discard_trades(robbed_player)
 				robbed_player.must_discard.fill(robbed_player.resource_card_count.item() // 2)
@@ -301,12 +238,6 @@ class Handler:
 			self.game.immediate_play.append(player)
 
 	def handle_player_trade(self, player_from, player_to, trade):
-		# if not np.all(player_from.resource_cards + trade >= 0):
-		# 	print("illegal player trade", player_from, trade)
-		# 	return
-		# if not np.all(player_to.resource_cards - trade >= 0):
-		# 	print("illegal player trade", player_to, trade)
-		# 	return
 		change = np.sum(trade)
 		player_from.resource_cards += trade
 		player_from.resource_card_count += change
@@ -316,27 +247,16 @@ class Handler:
 		player_to.resource_card_count -= change
 		player_to.resource_tuple = tuple(player_to.resource_cards)
 		player_to.resource_port_tuple = tuple(player_to.resource_cards * player_to.port_access[:5])
-		# assert player_from.can_afford(no_cost), (player_from, trade)
-		# assert player_to.can_afford(no_cost), (player_to, trade)
 		if not self.game.state.build_phase:
 			self.set_post_roll_mask(self.game.current_player)
 
 	def handle_bank_trade(self, trade, player):
-		# if not np.all(player.resource_cards + trade >= 0):
-		# 	print("illegal bank trade", player, trade)
-		# 	self.check_bank_trades(player)
-		# 	self.check_general_port_trades(player)
-		# 	self.check_resource_port_trades(player)
-		# 	return
 		player.resource_cards += trade
-		# self.game.state.game_state_slices[df.bank_resources] -= trade
 		self.game.state.bank_resources -= trade
 		player.resource_card_count.fill(int(np.sum(player.resource_cards)))
 		player.resource_tuple = tuple(player.resource_cards)
 		player.resource_port_tuple = tuple(player.resource_cards * player.port_access[:5])
 		self.game.bank_resource_tuple = tuple(self.game.state.bank_resources)
-		# assert player.can_afford(no_cost), (player, trade)
-		# if not self.game.state.game_state_slices[df.build_phase]:
 		if not self.game.state.build_phase:
 			if player.must_discard == 0:
 				if player == self.game.current_player:
@@ -351,7 +271,6 @@ class Handler:
 			opponent.dynamic_mask.only(df.decline_player_trade)
 			if opponent.can_afford(trade * -1):
 				opponent.dynamic_mask.can(df.accept_player_trade)
-		# self.game.state.game_state_slices[df.current_player_trade] += trade
 		self.game.state.current_player_trade += trade
 		self.game.trading_player = player
 		self.game.immediate_play.extend(player.other_players)
@@ -435,12 +354,7 @@ class Handler:
 		next_settlement_indices = player.settlement_indices[(player.settlement_indices != -1) & (player.settlement_indices != vertex.index)]
 		filler = np.zeros(gs.max_settlement_count)
 		filler.fill(-1)
-		# next_settlement_indices[:] = np.hstack([next_settlement_indices, filler])[:5]
-		# next_settlement_indices.resize(gs.resource_type_count)
 		player.settlement_indices[:] = np.hstack([next_settlement_indices, filler])[:5]
-		# print(vertex, vertex.index)
-		# print(player.city_indices)
-		# print(player.settlement_indices)
 		self.handle_bank_trade(gs.city_cost, player)
 		player.city_count += 1
 		player.settlement_count -= 1
@@ -460,11 +374,10 @@ class Handler:
 			player.static_mask.cannot(df.place_road)
 			return
 		for block_player in self.game.player_list:
-			# block_player.static_mask.mask_slices[df.place_road][edge.index:edge.index+1].fill(False)
+
 			block_player.static_mask.place_road[edge.index] = False
 		player.road_count += 1
 		edge.open.fill(0)
-		# player.owned_edges[edge.index].fill(1)
 		player.owned_edges[edge.index] = True
 		player.edge_list.append(edge)
 		if self.game.state.build_phase:
@@ -477,14 +390,8 @@ class Handler:
 			self.handle_bank_trade(gs.road_cost, player)
 		for adjacent_edge in edge.edges:
 			player.static_mask.place_road[adjacent_edge.index] = adjacent_edge.open
-			# if adjacent_edge.open:
-				# player.static_mask.mask_slices[df.place_road][adjacent_edge.index:adjacent_edge.index+1].fill(True)
-				# player.static_mask.place_road[adjacent_edge.index] = True
 		for adjacent_vertex in edge.vertices:
 			player.static_mask.place_settlement[adjacent_vertex.index] = adjacent_vertex.open
-			# if adjacent_vertex.open:
-				# player.static_mask.mask_slices[df.place_settlement][adjacent_vertex.index:adjacent_vertex.index+1].fill(True)
-				# player.static_mask.place_settlement[adjacent_vertex.index] = True
 			if adjacent_vertex not in player.edge_proximity_vertices:
 				player.edge_proximity_vertices.append(adjacent_vertex)
 		if player.road_count == gs.max_road_count:
@@ -494,7 +401,6 @@ class Handler:
 
 	def maintain_longest_road(self, player):
 		player.calculate_longest_road()
-		# if player.longest_road > self.game.state.game_state_slices[df.longest_road_length]:
 		if player.longest_road > self.game.state.longest_road_length:
 			np.copyto(self.game.state.longest_road_length, player.longest_road)
 			if not player.owns_longest_road:
@@ -505,13 +411,9 @@ class Handler:
 
 	def handle_place_settlement(self, vertex, player):
 		player.settlement_indices[int(player.settlement_count)] = vertex.index
-		# print(vertex, vertex.index)
-		# print(player.city_indices)
-		# print(player.settlement_indices)
 		if player.settlement_count == gs.max_settlement_count:
 			player.dynamic_mask.cannot(df.place_settlement)
 			return
-		# if self.game.state.game_state_slices[df.build_phase]:
 		if self.game.state.build_phase:
 			player.dynamic_mask.cannot(df.place_settlement)
 			for edge in vertex.edges:
