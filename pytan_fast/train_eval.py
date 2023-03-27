@@ -23,7 +23,7 @@ def train_eval(
 		replay_buffer_capacity=10000,
 
 		# Hyperparameters
-		fc_layer_params=(2**7, 2**5),
+		fc_layer_params=(2**8, 2**6),
 		learning_rate=0.001,
 		n_step_update=5,
 
