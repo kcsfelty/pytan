@@ -25,7 +25,7 @@ def train_eval(
 		# Hyperparameters
 		fc_layer_params=(2**7, 2**6),
 		learning_rate=0.001,
-		n_step_update=5,
+		n_step_update=20,
 
 		# Intervals
 		eval_interval=35000,
