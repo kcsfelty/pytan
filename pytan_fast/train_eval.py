@@ -23,7 +23,7 @@ def train_eval(
 		replay_buffer_capacity=10000,
 
 		# Hyperparameters
-		fc_layer_params=(2**6, 2**5),
+		fc_layer_params=(2**7, 2**6),
 		learning_rate=0.001,
 		n_step_update=5,
 
@@ -126,12 +126,12 @@ if __name__ == "__main__":
 		"env_time_step_spec": train_env.time_step_spec(),
 	}
 
-	policy_half_life_steps = 10000
+	policy_half_life_steps = 15000
 	decay_rate = np.log(2) / policy_half_life_steps
 
 	train_eval(
 		env_specs=_env_specs,
 		learning_rate=decay_rate,
 		eval_interval=policy_half_life_steps * 7,
-		replay_buffer_capacity=policy_half_life_steps * 3,
+		replay_buffer_capacity=policy_half_life_steps * 2,
 	)
