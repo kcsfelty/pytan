@@ -156,8 +156,9 @@ class Player:
 			self.victory_points += victory_card_points
 			self.next_reward += victory_card_points
 			self.game.winning_player = self
-			self.next_reward += 1  # Always give at least one reward for a win
-			self.next_reward += 9 * (1 - np.log(2) / 15) ** (self.game.state.turn_number - 40)
+			self.next_reward += 1.  # Always give at least one reward for a win
+			# self.next_reward += 9 * (1 - np.log(2) / 15) ** (self.game.state.turn_number - 40)
+			self.next_reward += 9.
 			self.next_reward = min(float(self.next_reward), 10)
 			self.game.current_time_step_type = last_step_type
 			self.win_list.append(1)

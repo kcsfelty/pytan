@@ -22,7 +22,7 @@ from util.Dice import Dice
 rng = np.random.default_rng()
 
 expected_steps = 1800
-overall_point_reduction = 10
+overall_point_reduction = 0
 time_drain_reward = overall_point_reduction / expected_steps
 
 
