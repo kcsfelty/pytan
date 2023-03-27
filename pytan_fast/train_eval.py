@@ -19,7 +19,7 @@ def train_eval(
 		total_steps=100000000,
 
 		# Training / Experience
-		batch_size=64,
+		batch_size=500,
 		replay_buffer_capacity=10000,
 
 		# Hyperparameters
@@ -29,7 +29,7 @@ def train_eval(
 
 		# Intervals
 		eval_interval=35000,
-		train_interval=5,
+		train_interval=50,
 		checkpoint_interval=25000,
 	):
 	global_step = tf.Variable(0, trainable=False, dtype=tf.int64)
@@ -133,5 +133,5 @@ if __name__ == "__main__":
 		env_specs=_env_specs,
 		learning_rate=decay_rate,
 		eval_interval=policy_half_life_steps * 7,
-		replay_buffer_capacity=policy_half_life_steps * 5,
+		replay_buffer_capacity=policy_half_life_steps * 3,
 	)
