@@ -38,6 +38,7 @@ class FastAgent:
 				 checkpoint_dir="checkpoints",
 				 checkpoint_interval=10000,
 				 eval_interval=10000,
+				 min_train_frames=1000,
 		 ):
 		self.player_index = player_index
 		self.batch_size = batch_size
@@ -59,6 +60,7 @@ class FastAgent:
 		self.eps_decay_rate = eps_decay_rate
 		self.eps_cof = 1.
 		self.epsilon = self.eps_start + self.eps_min
+		self.min_train_frames = min_train_frames
 
 		self.train_step_counter = tf.Variable(0, dtype=tf.int64)
 		self.step_counter = tf.Variable(0, dtype=tf.int64)
@@ -119,7 +121,7 @@ class FastAgent:
 		return self.epsilon
 
 	def update_epsilon(self):
-		if self.replay_buffer.num_frames() < self.replay_buffer_capacity:
+		if self.replay_buffer.num_frames() < self.min_train_frames:
 			self.epsilon = 1.
 		self.eps_cof *= self.eps_decay_rate
 		self.epsilon = self.eps_min + self.eps_cof * self.eps_start
@@ -129,12 +131,12 @@ class FastAgent:
 		self.step_counter.assign_add(1)
 		self.update_epsilon()
 
-		if self.replay_buffer.num_frames() == self.replay_buffer_capacity:
+		if not self.replay_buffer.num_frames() < self.min_train_frames:
 			if self.step_counter.numpy() % self.train_interval == 0:
 				self.train()
 
 		if self.step_counter.numpy() % self.checkpoint_interval == 0:
-			print("Checkpointing", self.agent_prefix, "current eps:", self.epsilon)
+			print("Checkpointing", self.agent_prefix, "current step:", self.step_counter.read_value(),"current eps:", self.epsilon)
 			self.checkpoint()
 
 		if self.step_counter.numpy() % self.eval_interval == 0:
