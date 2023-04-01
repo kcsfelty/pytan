@@ -65,24 +65,24 @@ class Handler:
 		]
 
 	def check_bank_trades(self, player):
-		resource_tuple = tuple(np.maximum(player.resource_cards, 4))
+		resource_tuple = tuple(np.minimum(player.resource_cards, 4))
 		player_can_afford = self.bank_trades_lookup[resource_tuple]
-		bank_resource_tuple = tuple(np.maximum(self.game.state.bank_resources, 4))
+		bank_resource_tuple = tuple(np.minimum(self.game.state.bank_resources, 4))
 		bank_can_afford = self.bank_trades_lookup_bank[bank_resource_tuple]
 		np.copyto(player.dynamic_mask.mask_slices[df.bank_trade], np.logical_and(player_can_afford, bank_can_afford))
 
 	def check_general_port_trades(self, player):
 		if player.port_access[5]:
-			resource_tuple = tuple(np.maximum(player.resource_cards, 4))
+			resource_tuple = tuple(np.minimum(player.resource_cards, 4))
 			player_can_afford = self.general_port_trades_lookup[resource_tuple]
-			bank_resource_tuple = tuple(np.maximum(self.game.state.bank_resources, 4))
+			bank_resource_tuple = tuple(np.minimum(self.game.state.bank_resources, 4))
 			bank_can_afford = self.general_port_trades_lookup_bank[bank_resource_tuple]
 			np.copyto(player.dynamic_mask.mask_slices[df.general_port_trade], np.logical_and(player_can_afford, bank_can_afford))
 
 	def check_resource_port_trades(self, player):
-		resource_tuple = tuple(np.maximum(player.resource_cards, 4) * player.port_access[:5])
+		resource_tuple = tuple(np.minimum(player.resource_cards, 4) * player.port_access[:5])
 		player_can_afford = self.resource_port_trades_lookup[resource_tuple]
-		bank_resource_tuple = tuple(np.maximum(self.game.state.bank_resources, 4))
+		bank_resource_tuple = tuple(np.minimum(self.game.state.bank_resources, 4))
 		bank_can_afford = self.resource_port_trades_lookup_bank[bank_resource_tuple]
 		np.copyto(player.dynamic_mask.mask_slices[df.resource_port_trade], np.logical_and(player_can_afford, bank_can_afford))
 
