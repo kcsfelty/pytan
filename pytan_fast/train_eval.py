@@ -28,7 +28,7 @@ def train_eval(
 		# Intervals
 		eval_interval=35000,
 		train_interval=50,
-		checkpoint_interval=50000,
+		checkpoint_interval=10000,
 	):
 	global_step = tf.Variable(0, trainable=False, dtype=tf.int64)
 	global_step_checkpointer = common.Checkpointer(

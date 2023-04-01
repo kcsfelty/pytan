@@ -193,6 +193,7 @@ class FastAgent:
 
 	def reduce_n(self, amount=1):
 		self.n_step_update -= amount
+		print(self.agent_prefix, "reducing n to", self.n_step_update, "current step", self.step_counter)
 		self.dataset = self.replay_buffer.as_dataset(
 			num_parallel_calls=3,
 			sample_batch_size=self.batch_size,
