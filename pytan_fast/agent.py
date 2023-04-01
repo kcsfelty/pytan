@@ -192,16 +192,17 @@ class FastAgent:
 		return True
 
 	def reduce_n(self, amount=1):
-		self.n_step_update -= amount
-		print(self.agent_prefix, "reducing n to", self.n_step_update, "current step", self.step_counter)
-		self.dataset = self.replay_buffer.as_dataset(
-			num_parallel_calls=3,
-			sample_batch_size=self.batch_size,
-			num_steps=self.n_step_update + 1).prefetch(3)
+		min_n = 2
+		if self.n_step_update > min_n:
+			self.n_step_update -= amount
+			print(self.agent_prefix, "reducing n to", self.n_step_update, "current step", self.step_counter)
+			self.dataset = self.replay_buffer.as_dataset(
+				num_parallel_calls=3,
+				sample_batch_size=self.batch_size,
+				num_steps=self.n_step_update + 1).prefetch(3)
 
-		self.iterator = iter(self.dataset)
-		self.agent._train_sequence_length -= 1
-
+			self.iterator = iter(self.dataset)
+			self.agent._train_sequence_length -= 1
 
 	def checkpoint(self):
 		self.checkpointer.save(global_step=self.global_step.numpy().item())

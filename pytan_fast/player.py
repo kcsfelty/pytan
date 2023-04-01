@@ -229,7 +229,8 @@ class Player:
 			"player_trade_total": np.sum(self.player_trade_total).item(),
 			"implicit_action_ratio": self.policy_action_count / self.implicit_action_count,
 			"longest_road_per_road": self.longest_road / self.road_count.item(),
-			"win_rate_50": self.win_rate(50)
+			"win_rate_50": self.win_rate(50),
+			"n_step_update": self.agent.n_step_update,
 		}
 		if self.game.winning_player == self:
 			scalars["turn_count"] = self.game.state.turn_number.item()
