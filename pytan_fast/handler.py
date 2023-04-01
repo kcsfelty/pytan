@@ -8,7 +8,7 @@ from pytan_fast.get_trades import get_trades
 from util.reverse_histogram import reverse_histogram
 
 
-def get_trade_lookup(trade_list, total_cards=20):
+def get_trade_lookup(trade_list, total_cards=4):
 	all_hands = np.mgrid[0:total_cards, 0:total_cards, 0:total_cards, 0:total_cards, 0:total_cards].T
 	all_trades = np.expand_dims(trade_list, axis=(1, 2, 3, 4, 5))
 	return np.all(all_hands + all_trades >= 0, axis=-1).T
@@ -65,7 +65,7 @@ class Handler:
 		]
 
 	def check_bank_trades(self, player):
-		resource_tuple = tuple(player.resource_cards)
+		resource_tuple = tuple(np.maximum(player.resource_cards, 4))
 		player_can_afford = self.bank_trades_lookup[resource_tuple]
 		bank_resource_tuple = tuple(self.game.state.bank_resources)
 		bank_can_afford = self.bank_trades_lookup_bank[bank_resource_tuple]
@@ -73,14 +73,14 @@ class Handler:
 
 	def check_general_port_trades(self, player):
 		if player.port_access[5]:
-			resource_tuple = tuple(player.resource_cards)
+			resource_tuple = tuple(np.maximum(player.resource_cards, 4))
 			player_can_afford = self.general_port_trades_lookup[resource_tuple]
 			bank_resource_tuple = tuple(self.game.state.bank_resources)
 			bank_can_afford = self.general_port_trades_lookup_bank[bank_resource_tuple]
 			np.copyto(player.dynamic_mask.mask_slices[df.general_port_trade], np.logical_and(player_can_afford, bank_can_afford))
 
 	def check_resource_port_trades(self, player):
-		resource_tuple = tuple(player.resource_cards * player.port_access[:5])
+		resource_tuple = tuple(np.maximum(player.resource_cards, 4) * player.port_access[:5])
 		player_can_afford = self.resource_port_trades_lookup[resource_tuple]
 		bank_resource_tuple = tuple(self.game.state.bank_resources)
 		bank_can_afford = self.resource_port_trades_lookup_bank[bank_resource_tuple]
