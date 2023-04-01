@@ -112,7 +112,7 @@ if __name__ == "__main__":
 		"env_time_step_spec": train_env.time_step_spec(),
 	}
 
-	policy_half_life_steps = 10000
+	policy_half_life_steps = 5000
 	decay_rate = np.log(2) / policy_half_life_steps
 
 	train_eval(

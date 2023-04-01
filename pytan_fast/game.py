@@ -217,7 +217,7 @@ class PyTanFast(PyEnvironment, ABC):
 
 	def get_discount(self, exp_scale=2, offset=6):
 		# result = 1. - ((self.max_victory_points - offset) / self.victory_point_limit) ** exp_scale
-		result = 0.998
+		result = 1.0
 		result = np.expand_dims(result, axis=0)
 		result = tf.convert_to_tensor(result, dtype=tf.float32)
 		return result

@@ -1,3 +1,4 @@
+import math
 import os
 import time
 
@@ -30,10 +31,10 @@ class FastAgent:
 				 min_q_value=0,
 				 max_q_value=10,
 				 n_step_update=1,
-				 gamma=1.0,
+				 gamma=0.95,
 				 epsilon_greedy=None,
 				 eps_min=0.15,
-				 eps_start=0.50,
+				 eps_start=0.85,
 				 eps_decay_rate=0.9999,
 				 checkpoint_dir="checkpoints",
 				 checkpoint_interval=10000,
@@ -61,6 +62,7 @@ class FastAgent:
 		self.eps_cof = 1.
 		self.epsilon = self.eps_start + self.eps_min
 		self.min_train_frames = min_train_frames
+		self.losses = []
 
 		self.train_step_counter = tf.Variable(0, dtype=tf.int64)
 		self.step_counter = tf.Variable(0, dtype=tf.int64)
@@ -72,18 +74,18 @@ class FastAgent:
 			fc_layer_params=self.fc_layer_params,
 			name=self.agent_prefix + "_network")
 
-		self.target_categorical_q_net = categorical_q_network.CategoricalQNetwork(
-			env_specs["env_observation_spec"],
-			action_spec=env_specs["env_action_spec"],
-			num_atoms=self.num_atoms,
-			fc_layer_params=self.fc_layer_params,
-			name=self.agent_prefix + "_target_network")
+		# self.target_categorical_q_net = categorical_q_network.CategoricalQNetwork(
+		# 	env_specs["env_observation_spec"],
+		# 	action_spec=env_specs["env_action_spec"],
+		# 	num_atoms=self.num_atoms,
+		# 	fc_layer_params=self.fc_layer_params,
+		# 	name=self.agent_prefix + "_target_network")
 
 		self.agent = categorical_dqn_agent.CategoricalDqnAgent(
 			time_step_spec=env_specs["env_time_step_spec"],
 			action_spec=env_specs["env_action_spec"],
 			categorical_q_network=self.categorical_q_net,
-			target_categorical_q_network=self.target_categorical_q_net,
+			# target_categorical_q_network=self.target_categorical_q_net,
 			optimizer=tf.compat.v1.train.AdamOptimizer(learning_rate=learning_rate),
 			min_q_value=self.min_q_value,
 			max_q_value=self.max_q_value,
@@ -173,7 +175,32 @@ class FastAgent:
 	def train(self):
 		exp, _ = next(self.iterator)
 		with self.writer.as_default():
-			self.agent.train(exp)
+			loss_info = self.agent.train(exp)
+			self.losses.append(loss_info.loss)
+			if self.check_loss_divergence():
+				self.reduce_n()
+
+	def check_loss_divergence(self):
+		lookback = 1000
+		count = 3
+		tol = 0.01
+		if len(self.losses) < lookback + count:
+			return False
+		for i in range(count):
+			if not math.fabs(self.losses[-lookback] - self.losses[-(i + 1)]) < tol:
+				return False
+		return True
+
+	def reduce_n(self, amount=1):
+		self.n_step_update -= amount
+		self.dataset = self.replay_buffer.as_dataset(
+			num_parallel_calls=3,
+			sample_batch_size=self.batch_size,
+			num_steps=self.n_step_update + 1).prefetch(3)
+
+		self.iterator = iter(self.dataset)
+		self.agent._train_sequence_length -= 1
+
 
 	def checkpoint(self):
 		self.checkpointer.save(global_step=self.global_step.numpy().item())
