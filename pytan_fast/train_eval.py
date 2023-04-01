@@ -21,9 +21,9 @@ def train_eval(
 		replay_buffer_capacity=10000,
 
 		# Hyperparameters
-		fc_layer_params=(2**7, 2**6),
+		fc_layer_params=(2**7, 2**6, 2**6, 2**6),
 		learning_rate=0.001,
-		n_step_update=45,
+		n_step_update=50,
 
 		# Intervals
 		eval_interval=35000,
@@ -51,7 +51,7 @@ def train_eval(
 			checkpoint_interval=checkpoint_interval,
 			global_step=global_step,
 			eval_interval=eval_interval,
-			eps_decay_rate=1 - np.log(2) / 100000,
+			eps_decay_rate=1 - np.log(2) / 200000,
 			min_train_frames=20000)
 		for i in range(player_count)]
 

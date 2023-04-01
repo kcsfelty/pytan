@@ -33,8 +33,8 @@ class FastAgent:
 				 n_step_update=1,
 				 gamma=0.95,
 				 epsilon_greedy=None,
-				 eps_min=0.15,
-				 eps_start=0.85,
+				 eps_min=0.2,
+				 eps_start=0.8,
 				 eps_decay_rate=0.9999,
 				 checkpoint_dir="checkpoints",
 				 checkpoint_interval=10000,
@@ -177,8 +177,8 @@ class FastAgent:
 		with self.writer.as_default():
 			loss_info = self.agent.train(exp)
 			self.losses.append(loss_info.loss)
-			if self.check_loss_divergence():
-				self.reduce_n()
+			# if self.check_loss_divergence():
+			# 	self.reduce_n()
 
 	def check_loss_divergence(self):
 		lookback = 1000
