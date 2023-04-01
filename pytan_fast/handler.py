@@ -88,10 +88,12 @@ class Handler:
 
 	def check_player_trades(self, player):
 		if self.game.player_trades_this_turn is not gs.player_trade_per_turn_limit:
-			np.copyto(player.dynamic_mask.mask_slices[df.offer_player_trade], self.player_trades_lookup[player.resource_tuple])
+			resource_tuple = tuple(np.minimum(player.resource_cards, 4))
+			np.copyto(player.dynamic_mask.mask_slices[df.offer_player_trade], self.player_trades_lookup[resource_tuple])
 
 	def check_discard_trades(self, player):
-		np.copyto(player.dynamic_mask.mask_slices[df.discard], self.discard_trades_lookup[player.resource_tuple])
+		resource_tuple = tuple(np.minimum(player.resource_cards, 4))
+		np.copyto(player.dynamic_mask.mask_slices[df.discard], self.discard_trades_lookup[resource_tuple])
 
 	def check_player_purchase(self, player):
 		self.check_place_road(player)
