@@ -8,7 +8,7 @@ from pytan_fast.get_trades import get_trades
 from util.reverse_histogram import reverse_histogram
 
 
-def get_trade_lookup(trade_list, total_cards=4):
+def get_trade_lookup(trade_list, total_cards=5):
 	all_hands = np.mgrid[0:total_cards, 0:total_cards, 0:total_cards, 0:total_cards, 0:total_cards].T
 	all_trades = np.expand_dims(trade_list, axis=(1, 2, 3, 4, 5))
 	return np.all(all_hands + all_trades >= 0, axis=-1).T
