@@ -72,10 +72,18 @@ class FastAgent:
 			fc_layer_params=self.fc_layer_params,
 			name=self.agent_prefix + "_network")
 
+		self.target_categorical_q_net = categorical_q_network.CategoricalQNetwork(
+			env_specs["env_observation_spec"],
+			action_spec=env_specs["env_action_spec"],
+			num_atoms=self.num_atoms,
+			fc_layer_params=self.fc_layer_params,
+			name=self.agent_prefix + "_target_network")
+
 		self.agent = categorical_dqn_agent.CategoricalDqnAgent(
 			time_step_spec=env_specs["env_time_step_spec"],
 			action_spec=env_specs["env_action_spec"],
 			categorical_q_network=self.categorical_q_net,
+			target_categorical_q_network=self.target_categorical_q_net,
 			optimizer=tf.compat.v1.train.AdamOptimizer(learning_rate=learning_rate),
 			min_q_value=self.min_q_value,
 			max_q_value=self.max_q_value,

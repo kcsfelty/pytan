@@ -1,11 +1,8 @@
 import os
-import time
-from abc import ABC
 
 import numpy as np
 import tensorflow as tf
-from tf_agents.environments import tf_py_environment, parallel_py_environment
-from tf_agents.replay_buffers import tf_uniform_replay_buffer
+from tf_agents.environments import tf_py_environment
 from tf_agents.utils import common
 
 from pytan_fast.agent import FastAgent
@@ -26,7 +23,7 @@ def train_eval(
 		# Hyperparameters
 		fc_layer_params=(2**7, 2**6),
 		learning_rate=0.001,
-		n_step_update=50,
+		n_step_update=45,
 
 		# Intervals
 		eval_interval=35000,
@@ -35,7 +32,7 @@ def train_eval(
 	):
 	global_step = tf.Variable(0, trainable=False, dtype=tf.int64)
 	global_step_checkpointer = common.Checkpointer(
-		ckpt_dir=os.path.join("../backups/0/checkpoints", "global_step"),
+		ckpt_dir=os.path.join("checkpoints", "global_step"),
 		global_step=global_step,
 		max_to_keep=1)
 	global_step_checkpointer.initialize_or_restore()
