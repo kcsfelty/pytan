@@ -119,6 +119,11 @@ class FastAgent:
 				self.replay_buffer_list.append(env_replay_buffer)
 				self.dataset_list.append(env_dataset)
 				self.iterator_list.append(env_iterator)
+
+			self.replay_buffer = tf_uniform_replay_buffer.TFUniformReplayBuffer(
+				data_spec=self.agent.collect_data_spec,
+				batch_size=1,
+				max_length=1)
 		else:
 			self.replay_buffer = tf_uniform_replay_buffer.TFUniformReplayBuffer(
 				data_spec=self.agent.collect_data_spec,
@@ -239,11 +244,3 @@ class FastAgent:
 
 	def eval(self):
 		pass
-
-
-class AgentMultiProcessingCache:
-	def __init__(self, agent, replay_buffer_capacity, train_interval):
-		self.agent = agent
-		self.replay_buffer_capacity = replay_buffer_capacity
-		self.train_interval = train_interval
-
