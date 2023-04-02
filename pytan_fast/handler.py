@@ -4,55 +4,32 @@ import numpy as np
 
 import pytan_fast.definitions as df
 import pytan_fast.settings as gs
-from pytan_fast.get_trades import get_trades
+
+from pytan_fast.trading import bank_trades, general_port_trades, resource_port_trades, player_trades, \
+	discard_trades, year_of_plenty_trades, bank_trades_lookup, bank_trades_lookup_bank, general_port_trades_lookup, \
+	general_port_trades_lookup_bank, resource_port_trades_lookup, resource_port_trades_lookup_bank, \
+	player_trades_lookup, discard_trades_lookup
 from util.reverse_histogram import reverse_histogram
-
-
-def get_trade_lookup(trade_list, total_cards=5):
-	all_hands = np.mgrid[0:total_cards, 0:total_cards, 0:total_cards, 0:total_cards, 0:total_cards].T
-	all_trades = np.expand_dims(trade_list, axis=(1, 2, 3, 4, 5))
-	return np.all(all_hands + all_trades >= 0, axis=-1).T
-
-
-no_cost = np.zeros(5)
-max_cards = np.zeros(5)
-max_cards.fill(-19)
 
 
 class Handler:
 	def __init__(self, game, log_action=False):
 		self.game = game
 		self.log_action = log_action
-		self.bank_trades, self.general_port_trades, self.resource_port_trades, self.player_trades, self.year_of_plenty_trades, self.discard_trades = get_trades()
-		self.bank_trades = np.array(self.bank_trades)
-		self.general_port_trades = np.array(self.general_port_trades)
-		self.resource_port_trades = np.array(self.resource_port_trades)
-		self.player_trades = np.array(self.player_trades)
-		self.year_of_plenty_trades = np.array(self.year_of_plenty_trades)
-
-		self.bank_trades_lookup_bank = get_trade_lookup(self.bank_trades * -1)
-		self.general_port_trades_lookup_bank = get_trade_lookup(self.general_port_trades * -1)
-		self.resource_port_trades_lookup_bank = get_trade_lookup(self.resource_port_trades * -1)
-		self.bank_trades_lookup = get_trade_lookup(self.bank_trades)
-		self.general_port_trades_lookup = get_trade_lookup(self.general_port_trades)
-		self.resource_port_trades_lookup = get_trade_lookup(self.resource_port_trades)
-		self.player_trades_lookup = get_trade_lookup(self.player_trades)
-		self.discard_trades_lookup = get_trade_lookup(self.discard_trades)
-
 		self.action_lookup = [
 			*[(self.handle_end_turn, None)],
 			*[(self.handle_roll_dice, None)],
-			*[(self.handle_bank_trade, trade) for trade in self.bank_trades],
-			*[(self.handle_bank_trade, trade) for trade in self.general_port_trades],
-			*[(self.handle_bank_trade, trade) for trade in self.resource_port_trades],
-			*[(self.handle_offer_player_trade, trade) for trade in self.player_trades],
+			*[(self.handle_bank_trade, trade) for trade in bank_trades],
+			*[(self.handle_bank_trade, trade) for trade in general_port_trades],
+			*[(self.handle_bank_trade, trade) for trade in resource_port_trades],
+			*[(self.handle_offer_player_trade, trade) for trade in player_trades],
 			*[(self.handle_accept_player_trade, None)],
 			*[(self.handle_decline_player_trade, None)],
 			*[(self.handle_cancel_player_trade, None)],
 			*[(self.handle_confirm_player_trade, player) for player in self.game.player_list],
 			*[(self.handle_move_robber, tile) for tile in self.game.board.tiles],
 			*[(self.handle_rob_player, player) for player in self.game.player_list],
-			*[(self.handle_discard, trade) for trade in self.discard_trades],
+			*[(self.handle_discard, trade) for trade in discard_trades],
 			*[(self.handle_place_city, vertex) for vertex in self.game.board.vertices],
 			*[(self.handle_place_road, edge) for edge in self.game.board.edges],
 			*[(self.handle_place_settlement, vertex) for vertex in self.game.board.vertices],
@@ -60,40 +37,40 @@ class Handler:
 			*[(self.handle_play_knight, None)],
 			*[(self.handle_play_monopoly, resource_index) for resource_index in gs.resource_list],
 			*[(self.handle_play_road_building, None)],
-			*[(self.handle_play_year_of_plenty, trade) for trade in self.year_of_plenty_trades],
+			*[(self.handle_play_year_of_plenty, trade) for trade in year_of_plenty_trades],
 			*[(self.handle_no_action, None)],
 		]
 
 	def check_bank_trades(self, player):
 		resource_tuple = tuple(np.minimum(player.resource_cards, 4))
-		player_can_afford = self.bank_trades_lookup[resource_tuple]
+		player_can_afford = bank_trades_lookup[resource_tuple]
 		bank_resource_tuple = tuple(np.minimum(self.game.state.bank_resources, 4))
-		bank_can_afford = self.bank_trades_lookup_bank[bank_resource_tuple]
+		bank_can_afford = bank_trades_lookup_bank[bank_resource_tuple]
 		np.copyto(player.dynamic_mask.mask_slices[df.bank_trade], np.logical_and(player_can_afford, bank_can_afford))
 
 	def check_general_port_trades(self, player):
 		if player.port_access[5]:
 			resource_tuple = tuple(np.minimum(player.resource_cards, 4))
-			player_can_afford = self.general_port_trades_lookup[resource_tuple]
+			player_can_afford = general_port_trades_lookup[resource_tuple]
 			bank_resource_tuple = tuple(np.minimum(self.game.state.bank_resources, 4))
-			bank_can_afford = self.general_port_trades_lookup_bank[bank_resource_tuple]
+			bank_can_afford = general_port_trades_lookup_bank[bank_resource_tuple]
 			np.copyto(player.dynamic_mask.mask_slices[df.general_port_trade], np.logical_and(player_can_afford, bank_can_afford))
 
 	def check_resource_port_trades(self, player):
 		resource_tuple = tuple(np.minimum(player.resource_cards, 4) * player.port_access[:5])
-		player_can_afford = self.resource_port_trades_lookup[resource_tuple]
+		player_can_afford = resource_port_trades_lookup[resource_tuple]
 		bank_resource_tuple = tuple(np.minimum(self.game.state.bank_resources, 4))
-		bank_can_afford = self.resource_port_trades_lookup_bank[bank_resource_tuple]
+		bank_can_afford = resource_port_trades_lookup_bank[bank_resource_tuple]
 		np.copyto(player.dynamic_mask.mask_slices[df.resource_port_trade], np.logical_and(player_can_afford, bank_can_afford))
 
 	def check_player_trades(self, player):
 		if self.game.player_trades_this_turn is not gs.player_trade_per_turn_limit:
 			resource_tuple = tuple(np.minimum(player.resource_cards, 4))
-			np.copyto(player.dynamic_mask.mask_slices[df.offer_player_trade], self.player_trades_lookup[resource_tuple])
+			np.copyto(player.dynamic_mask.mask_slices[df.offer_player_trade], player_trades_lookup[resource_tuple])
 
 	def check_discard_trades(self, player):
 		resource_tuple = tuple(np.minimum(player.resource_cards, 4))
-		np.copyto(player.dynamic_mask.mask_slices[df.discard], self.discard_trades_lookup[resource_tuple])
+		np.copyto(player.dynamic_mask.mask_slices[df.discard], discard_trades_lookup[resource_tuple])
 
 	def check_player_purchase(self, player):
 		self.check_place_road(player)

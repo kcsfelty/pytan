@@ -177,7 +177,7 @@ class Player:
 			self.implicit_action_count += 1
 		else:
 			self.current_action_is_implicit = False
-			self.last_action = self.agent.act(self.last_time_step)
+			self.last_action = self.agent.act(self.last_time_step, self.game.eval)
 			self.policy_action_count += 1
 
 	def end_trajectory(self, force_log=False):
@@ -185,7 +185,8 @@ class Player:
 			next_time_step = self.game.get_time_step(self)
 			traj = trajectories.from_transition(self.last_time_step, self.last_action, next_time_step)
 			for observer in self.agent.observers:
-				observer(traj)
+				if not self.game.eval:
+					observer(traj, self.game.env_index)
 
 	def can_afford(self, trade):
 		return np.all(self.resource_cards + trade >= 0)

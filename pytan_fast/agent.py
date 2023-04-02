@@ -40,6 +40,7 @@ class FastAgent:
 				 checkpoint_interval=10000,
 				 eval_interval=10000,
 				 min_train_frames=1000,
+				 env_count=None,
 		 ):
 		self.player_index = player_index
 		self.batch_size = batch_size
@@ -101,17 +102,35 @@ class FastAgent:
 		# self.categorical_q_net.summary()
 		self.agent.initialize()
 
-		self.replay_buffer = tf_uniform_replay_buffer.TFUniformReplayBuffer(
-			data_spec=self.agent.collect_data_spec,
-			batch_size=1,
-			max_length=self.replay_buffer_capacity)
+		if env_count:
+			self.replay_buffer_list = []
+			self.dataset_list = []
+			self.iterator_list = []
+			for _ in range(env_count):
+				env_replay_buffer = tf_uniform_replay_buffer.TFUniformReplayBuffer(
+						data_spec=self.agent.collect_data_spec,
+						batch_size=1,
+						max_length=self.replay_buffer_capacity)
+				env_dataset = env_replay_buffer.as_dataset(
+					num_parallel_calls=3,
+					sample_batch_size=self.batch_size,
+					num_steps=self.n_step_update + 1).prefetch(3)
+				env_iterator = iter(env_dataset)
+				self.replay_buffer_list.append(env_replay_buffer)
+				self.dataset_list.append(env_dataset)
+				self.iterator_list.append(env_iterator)
+		else:
+			self.replay_buffer = tf_uniform_replay_buffer.TFUniformReplayBuffer(
+				data_spec=self.agent.collect_data_spec,
+				batch_size=1,
+				max_length=self.replay_buffer_capacity)
 
-		self.dataset = self.replay_buffer.as_dataset(
-			num_parallel_calls=3,
-			sample_batch_size=self.batch_size,
-			num_steps=self.n_step_update + 1).prefetch(3)
+			self.dataset = self.replay_buffer.as_dataset(
+				num_parallel_calls=3,
+				sample_batch_size=self.batch_size,
+				num_steps=self.n_step_update + 1).prefetch(3)
 
-		self.iterator = iter(self.dataset)
+			self.iterator = iter(self.dataset)
 		self.observers = [self.add_step]
 
 		self.checkpointer = common.Checkpointer(
@@ -136,14 +155,17 @@ class FastAgent:
 		self.eps_cof *= self.eps_decay_rate
 		self.epsilon = self.eps_min + self.eps_cof * self.eps_start
 
-	def add_step(self, step):
-		self.replay_buffer.add_batch(step)
+	def add_step(self, step, env_index=None):
+		if env_index:
+			self.replay_buffer_list[env_index].add_batch(step)
+		else:
+			self.replay_buffer.add_batch(step)
 		self.step_counter.assign_add(1)
 		self.update_epsilon()
 
 		if not self.replay_buffer.num_frames() < self.min_train_frames:
 			if self.step_counter.numpy() % self.train_interval == 0:
-				self.train()
+				self.train(env_index)
 
 		if self.step_counter.numpy() % self.checkpoint_interval == 0:
 			print("Checkpointing", self.agent_prefix, "current step:", self.step_counter.read_value(),"current eps:", self.epsilon)
@@ -156,10 +178,10 @@ class FastAgent:
 		if self.step_counter.numpy() % 25000 == 0:
 			self.reduce_n()
 
-	def act(self, time_step, collect=True):
-		if collect:
-			return self.agent.collect_policy.action(time_step)
-		return self.agent.policy.action(time_step)
+	def act(self, time_step, eval=False):
+		if eval:
+			return self.agent.policy.action(time_step)
+		return self.agent.collect_policy.action(time_step)
 
 	def write_summary(self, summaries, step):
 		with self.writer.as_default():
@@ -175,8 +197,11 @@ class FastAgent:
 					step=step.numpy().item(),
 					buckets=len(summaries["histograms"][summary_key]))
 
-	def train(self):
-		exp, _ = next(self.iterator)
+	def train(self, env_index):
+		if env_index:
+			exp, _ = next(self.iterator_list[env_index])
+		else:
+			exp, _ = next(self.iterator)
 		with self.writer.as_default():
 			loss_info = self.agent.train(exp)
 			self.losses.append(loss_info.loss)
@@ -212,3 +237,11 @@ class FastAgent:
 
 	def eval(self):
 		pass
+
+
+class AgentMultiProcessingCache:
+	def __init__(self, agent, replay_buffer_capacity, train_interval):
+		self.agent = agent
+		self.replay_buffer_capacity = replay_buffer_capacity
+		self.train_interval = train_interval
+

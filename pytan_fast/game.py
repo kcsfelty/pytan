@@ -38,7 +38,7 @@ last_step_type = tf.convert_to_tensor(np.expand_dims(StepType.LAST, axis=0))
 
 
 class PyTanFast(PyEnvironment, ABC):
-	def __init__(self, agent_list=None, global_step=None, log_dir="./logs", victory_point_limit=10, condensed_state=False):
+	def __init__(self, agent_list=None, global_step=None, log_dir="./logs", victory_point_limit=10, condensed_state=False, env_index=None, eval=False):
 		super().__init__()
 
 		# Summaries
@@ -47,6 +47,8 @@ class PyTanFast(PyEnvironment, ABC):
 		self.writer = tf.compat.v2.summary.create_file_writer(self.log_dir)
 
 		# Environment
+		self.env_index = env_index
+		self.eval = eval
 		self.global_step = global_step
 		self.condensed_state = condensed_state
 		self.state = State(self.condensed_state)
