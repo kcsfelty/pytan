@@ -21,13 +21,15 @@ def train_eval(
 		replay_buffer_capacity=10000,
 
 		# Hyperparameters
-		fc_layer_params=(2**7, 2**6, 2**6, 2**6),
+		fc_layer_params=(2**7, 2**6),
 		learning_rate=0.001,
 		n_step_update=50,
+		eps_decay_rate=1 - np.log(2) / 200000,
+		min_train_frames=20000,
 
 		# Intervals
 		eval_interval=35000,
-		train_interval=50,
+		train_interval=40,
 		checkpoint_interval=10000,
 	):
 	global_step = tf.Variable(0, trainable=False, dtype=tf.int64)
@@ -51,8 +53,8 @@ def train_eval(
 			checkpoint_interval=checkpoint_interval,
 			global_step=global_step,
 			eval_interval=eval_interval,
-			eps_decay_rate=1 - np.log(2) / 200000,
-			min_train_frames=20000)
+			eps_decay_rate=eps_decay_rate,
+			min_train_frames=min_train_frames)
 		for i in range(player_count)]
 
 	def checkpoint():
@@ -79,30 +81,6 @@ def train_eval(
 		checkpoint()
 
 
-def random_experience(env_specs, agent_list, log_dir):
-	random_agent_list = [RandomAgent(
-		env_specs=env_specs,
-		player_index=agent.player_index,
-		observers=[agent.replay_buffer.add_batch]
-	) for agent in agent_list]
-	global_step = tf.Variable(0, trainable=False, dtype=tf.int64)
-	env = PyTanFast(random_agent_list, global_step, log_dir)
-	env.reset()
-
-	def check_buffers_full():
-		for agent in agent_list:
-			if agent.replay_buffer.num_frames() < agent.replay_buffer_capacity:
-				return True
-		return False
-
-	log_interval = 5000
-
-	while check_buffers_full():
-		env.walk()
-		if global_step.numpy() % log_interval == 0:
-			print("Replay buffers:", "".join([str(int(agent.replay_buffer.num_frames()/agent.replay_buffer_capacity*10000)/100) + "%" for agent in agent_list]))
-
-
 if __name__ == "__main__":
 	_env = PyTanFast()
 	train_env = tf_py_environment.TFPyEnvironment(_env)
@@ -112,7 +90,7 @@ if __name__ == "__main__":
 		"env_time_step_spec": train_env.time_step_spec(),
 	}
 
-	policy_half_life_steps = 5000
+	policy_half_life_steps = 1000
 	decay_rate = np.log(2) / policy_half_life_steps
 
 	train_eval(

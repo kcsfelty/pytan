@@ -29,12 +29,12 @@ class FastAgent:
 				 num_atoms=51 * 1,
 				 fc_layer_params=(2**5, 2**5),
 				 min_q_value=0,
-				 max_q_value=10,
+				 max_q_value=4,
 				 n_step_update=1,
-				 gamma=0.95,
+				 gamma=1.0,
 				 epsilon_greedy=None,
 				 eps_min=0.2,
-				 eps_start=0.8,
+				 eps_start=0.5,
 				 eps_decay_rate=0.9999,
 				 checkpoint_dir="checkpoints",
 				 checkpoint_interval=10000,
@@ -153,6 +153,9 @@ class FastAgent:
 			print("Evaluating", self.agent_prefix)
 			self.eval()
 
+		if self.step_counter.numpy() % 25000 == 0:
+			self.reduce_n()
+
 	def act(self, time_step, collect=True):
 		if collect:
 			return self.agent.collect_policy.action(time_step)
@@ -192,7 +195,7 @@ class FastAgent:
 		return True
 
 	def reduce_n(self, amount=1):
-		min_n = 2
+		min_n = 5
 		if self.n_step_update > min_n:
 			self.n_step_update -= amount
 			print(self.agent_prefix, "reducing n to", self.n_step_update, "current step", self.step_counter)
