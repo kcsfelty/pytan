@@ -156,7 +156,7 @@ class PyTanFast(PyEnvironment, ABC):
 
 	def write_episode_summary(self):
 		summary = ""
-		if self.env_index:
+		if self.env_index is not None:
 			summary += "[env_{}]".format(self.env_index)
 		summary += "Game finished"
 		summary += str(self.state.turn_number.item()).rjust(5)
