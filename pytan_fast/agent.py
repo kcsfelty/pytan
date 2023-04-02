@@ -137,7 +137,7 @@ class FastAgent:
 			ckpt_dir=os.path.join(checkpoint_dir, self.agent_prefix),
 			max_to_keep=1,
 			policy=self.agent.policy,
-			replay_buffer=self.replay_buffer,
+			# replay_buffer=self.replay_buffer,
 			train_step_counter=self.train_step_counter,
 			step_counter=self.step_counter)
 
@@ -150,7 +150,8 @@ class FastAgent:
 		return self.epsilon
 
 	def update_epsilon(self):
-		if self.replay_buffer.num_frames() < self.min_train_frames:
+		# if self.replay_buffer.num_frames() < self.min_train_frames:
+		if self.step_counter.numpy().item() < self.min_train_frames:
 			self.epsilon = 1.
 		self.eps_cof *= self.eps_decay_rate
 		self.epsilon = self.eps_min + self.eps_cof * self.eps_start
@@ -163,7 +164,8 @@ class FastAgent:
 		self.step_counter.assign_add(1)
 		self.update_epsilon()
 
-		if not self.replay_buffer.num_frames() < self.min_train_frames:
+		# if not self.replay_buffer.num_frames() < self.min_train_frames:
+		if not self.step_counter.numpy().item() < self.min_train_frames:
 			if self.step_counter.numpy() % self.train_interval == 0:
 				self.train(env_index)
 
@@ -175,8 +177,8 @@ class FastAgent:
 			print("Evaluating", self.agent_prefix)
 			self.eval()
 
-		if self.step_counter.numpy() % 25000 == 0:
-			self.reduce_n()
+		# if self.step_counter.numpy() % 25000 == 0:
+		# 	self.reduce_n()
 
 	def act(self, time_step, eval=False):
 		if eval:

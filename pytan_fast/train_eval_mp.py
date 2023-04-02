@@ -6,7 +6,9 @@ import tensorflow as tf
 from tf_agents.environments import tf_py_environment
 from tf_agents.environments.parallel_py_environment import ProcessPyEnvironment
 from tf_agents.utils import common
-
+from threading import Thread
+import concurrent.futures
+import time
 from pytan_fast.agent import FastAgent
 from pytan_fast.game import PyTanFast
 from pytan_fast.settings import player_count
@@ -63,11 +65,6 @@ def train_eval(
 			min_train_frames=min_train_frames)
 		for i in range(player_count)]
 
-	def checkpoint():
-		global_step_checkpointer.save(global_step=global_step.read_value())
-		for checkpoint_agent in agent_list:
-			checkpoint_agent.checkpoint()
-
 	def get_multiprocessing_env(index):
 		class PyTanFastMultiProcessing(PyTanFast, ABC):
 			def __init__(self):
@@ -80,22 +77,31 @@ def train_eval(
 
 		return PyTanFastMultiProcessing
 
-	try:
-		env_list = [get_multiprocessing_env(env_index) for env_index in range(env_count)]
-		env_list = [ProcessPyEnvironment(mp_env) for mp_env in env_list]
-		for mp_env in env_list:
-			mp_env.start(wait_to_start=True)
-			mp_env.call("reset")
-			mp_env.call("run", step_limit=total_steps)
+	def logging(wait=30):
+		start = time.perf_counter()
+		last_step = int(global_step.numpy().item())
+		while last_step < total_steps:
+			this_step = int(global_step.numpy().item())
+			rate = (this_step - last_step) / (time.time() - start)
+			print("Current Step:", this_step, "rate:", rate, "steps/s")
+			last_step = this_step
+			time.sleep(wait)
 
-	except Exception as e:
-		print("Exception caught, creating checkpoint...")
-		print(e)
-		checkpoint()
-	except KeyboardInterrupt:
-		print("KeyboardInterrupt caught, creating checkpoint...")
-		checkpoint()
-
+	env_list = [PyTanFast(
+		agent_list=agent_list,
+		global_step=global_step,
+		log_dir=log_dir,
+		env_index=env_index
+	) for env_index in range(env_count)]
+	[mp_env.reset() for mp_env in env_list]
+	thread_list = [Thread(target=mp_env.run, kwargs={"step_limit": 10000}) for mp_env in env_list]
+	# log_thread = Thread(target=logging)
+	# log_thread.start()
+	# env_list = [ProcessPyEnvironment(mp_env) for mp_env in env_list]
+	for thread in thread_list:
+		thread.start()
+		# thread.join()
+	logging()
 
 if __name__ == "__main__":
 	_env = PyTanFast()
