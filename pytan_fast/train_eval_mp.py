@@ -42,7 +42,11 @@ class PyTanManager(BaseManager):
 	pass
 
 
-PyTanManager.register("FastAgent", FastAgent)
+agent_names = ["FastAgent" + str(player_index) for player_index in range(player_count)]
+
+for _agent_name in agent_names:
+	PyTanManager.register(_agent_name, FastAgent)
+
 PyTanManager.register("GlobalStep", GlobalStep)
 
 
@@ -93,7 +97,7 @@ def train_eval(
 	):
 	manager = get_manager()
 	global_step = manager.GlobalStep()
-	agent_list = [manager.FastAgent(
+	agent_list = [manager[agent_name](
 		player_index=player_index,
 		batch_size=train_interval * replay_ratio,
 		log_dir=log_dir,
@@ -108,7 +112,7 @@ def train_eval(
 		eps_decay_rate=eps_decay_rate,
 		min_train_frames=min_train_frames,
 		env_count=env_count
-	) for player_index in range(player_count)]
+	) for player_index, agent_name in enumerate(agent_names)]
 
 	def logging(wait=300):
 		start = time.perf_counter()
@@ -156,5 +160,5 @@ if __name__ == "__main__":
 		replay_buffer_capacity=500000,
 		replay_ratio=10,
 		# env_count=multiprocessing.cpu_count(),
-		env_count=2,
+		env_count=4,
 	)
