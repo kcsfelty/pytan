@@ -1,107 +1,141 @@
 import os
 from abc import ABC
-
+from threading import Timer
 import numpy as np
 import tensorflow as tf
+gpus = tf.config.list_physical_devices('GPU')
+if gpus:
+	try:
+		# Currently, memory growth needs to be the same across GPUs
+		for gpu in gpus:
+			tf.config.experimental.set_memory_growth(gpu, True)
+		logical_gpus = tf.config.list_logical_devices('GPU')
+		print(len(gpus), "Physical GPUs,", len(logical_gpus), "Logical GPUs")
+	except RuntimeError as e:
+		# Memory growth must be set before GPUs have been initialized
+		print(e)
 from tf_agents.environments import tf_py_environment
-from tf_agents.environments.parallel_py_environment import ProcessPyEnvironment
-from tf_agents.utils import common
-from threading import Thread
-import concurrent.futures
 import time
 from pytan_fast.agent import FastAgent
 from pytan_fast.game import PyTanFast
 from pytan_fast.settings import player_count
+import multiprocessing
+from multiprocessing.managers import BaseManager
+
+
+class GlobalStep:
+
+	def __init__(self):
+		self.value = tf.Variable(0, trainable=False, dtype=tf.int64)
+
+	def assign_add(self, value):
+		self.value.assign_add(value)
+
+	def read_value(self):
+		return self.value.read_value()
+
+	def numpy(self):
+		return self.value.numpy()
+
+
+class PyTanManager(BaseManager):
+	pass
+
+
+PyTanManager.register("FastAgent", FastAgent)
+PyTanManager.register("GlobalStep", GlobalStep)
+
+
+def do_game(agent_list, env_id, global_step, total_steps):
+	print("starting game on ", env_id, multiprocessing.current_process().name)
+	mp_game = PyTanFast(agent_list, env_index=env_id, global_step=global_step, lock=lock)
+	mp_game.reset()
+	while global_step.read_value() < total_steps:
+		mp_game.walk()
+	print("game finished", env_id, multiprocessing.current_process().name)
+
+
+def get_manager():
+	m = PyTanManager()
+	m.start()
+	return m
+
+def async_raise(error):
+	raise error
+
+
+def init(_lock):
+	global lock
+	lock = _lock
 
 
 def train_eval(
-		env_specs,
-		env_count=1,
-		log_dir="./logs/",
-		total_steps=100000000,
+	env_specs,
+	env_count=1,
+	log_dir="./logs/",
+	total_steps=100000000,
 
-		# Training / Experience
-		replay_ratio=1,
-		replay_buffer_capacity=10000,
+	# Training / Experience,
+	replay_ratio=10,
+	replay_buffer_capacity=500000,
 
-		# Hyperparameters
-		fc_layer_params=(2**7, 2**6),
-		learning_rate=0.001,
-		n_step_update=50,
-		eps_decay_rate=1 - np.log(2) / 200000,
-		min_train_frames=20000,
+	# Hyperparameters,
+	fc_layer_params=(2**7, 2**6),
+	learning_rate=0.0001,
+	n_step_update=50,
+	eps_decay_rate=1 - np.log(2) / 200000,
+	min_train_frames=20000,
 
-		# Intervals
-		eval_interval=35000,
-		train_interval=40,
-		checkpoint_interval=10000,
+	# Intervals,
+	eval_interval=1000,
+	train_interval=40,
+	checkpoint_interval=10000,
 	):
+	manager = get_manager()
+	global_step = manager.GlobalStep()
+	agent_list = [manager.FastAgent(
+		player_index=player_index,
+		batch_size=train_interval * replay_ratio,
+		log_dir=log_dir,
+		replay_buffer_capacity=int(replay_buffer_capacity/env_count),
+		fc_layer_params=fc_layer_params,
+		learning_rate=learning_rate,
+		n_step_update=n_step_update,
+		env_specs=env_specs,
+		train_interval=train_interval,
+		checkpoint_interval=checkpoint_interval,
+		eval_interval=eval_interval,
+		eps_decay_rate=eps_decay_rate,
+		min_train_frames=min_train_frames,
+		env_count=env_count
+	) for player_index in range(player_count)]
 
-	replay_buffer_capacity = replay_buffer_capacity // env_count
-	total_steps = total_steps // env_count
-
-	global_step = tf.Variable(0, trainable=False, dtype=tf.int64)
-	global_step_checkpointer = common.Checkpointer(
-		ckpt_dir=os.path.join("checkpoints", "global_step"),
-		global_step=global_step,
-		max_to_keep=1)
-	global_step_checkpointer.initialize_or_restore()
-
-	agent_list = [
-		FastAgent(
-			player_index=i,
-			batch_size=train_interval * replay_ratio,
-			log_dir=log_dir,
-			replay_buffer_capacity=replay_buffer_capacity,
-			fc_layer_params=fc_layer_params,
-			learning_rate=learning_rate,
-			n_step_update=n_step_update,
-			env_specs=env_specs,
-			train_interval=train_interval,
-			checkpoint_interval=checkpoint_interval,
-			global_step=global_step,
-			eval_interval=eval_interval,
-			eps_decay_rate=eps_decay_rate,
-			min_train_frames=min_train_frames)
-		for i in range(player_count)]
-
-	def get_multiprocessing_env(index):
-		class PyTanFastMultiProcessing(PyTanFast, ABC):
-			def __init__(self):
-				super().__init__(
-					agent_list=agent_list,
-					global_step=global_step,
-					log_dir=log_dir,
-					env_index=index
-				)
-
-		return PyTanFastMultiProcessing
-
-	def logging(wait=30):
+	def logging(wait=300):
 		start = time.perf_counter()
-		last_step = int(global_step.numpy().item())
+		last_step = int(global_step.read_value())
 		while last_step < total_steps:
-			this_step = int(global_step.numpy().item())
-			rate = (this_step - last_step) / (time.time() - start)
+			this_step = int(global_step.read_value())
+			rate = this_step / (time.perf_counter() - start)
 			print("Current Step:", this_step, "rate:", rate, "steps/s")
 			last_step = this_step
 			time.sleep(wait)
 
-	env_list = [PyTanFast(
-		agent_list=agent_list,
-		global_step=global_step,
-		log_dir=log_dir,
-		env_index=env_index
-	) for env_index in range(env_count)]
-	[mp_env.reset() for mp_env in env_list]
-	thread_list = [Thread(target=mp_env.run, kwargs={"step_limit": 10000}) for mp_env in env_list]
-	# log_thread = Thread(target=logging)
-	# log_thread.start()
-	# env_list = [ProcessPyEnvironment(mp_env) for mp_env in env_list]
-	for thread in thread_list:
-		thread.start()
-		# thread.join()
-	logging()
+	log_timer = Timer(1, logging)
+	log_timer.start()
+
+	lock = multiprocessing.Lock()
+	pool = multiprocessing.Pool(env_count, initializer=init, initargs=(lock,))
+	for i in range(env_count):
+		pool.apply_async(
+			func=do_game,
+			args=(agent_list, i, global_step, total_steps),
+			error_callback=async_raise,
+		)
+	pool.close()
+	pool.join()
+	log_timer.cancel()
+	print("finished")
+
 
 if __name__ == "__main__":
 	_env = PyTanFast()
@@ -112,7 +146,7 @@ if __name__ == "__main__":
 		"env_time_step_spec": train_env.time_step_spec(),
 	}
 
-	policy_half_life_steps = 1000
+	policy_half_life_steps = 5000
 	decay_rate = np.log(2) / policy_half_life_steps
 
 	train_eval(
@@ -120,5 +154,7 @@ if __name__ == "__main__":
 		learning_rate=decay_rate,
 		eval_interval=policy_half_life_steps * 7,
 		replay_buffer_capacity=500000,
-		replay_ratio=10
+		replay_ratio=10,
+		# env_count=multiprocessing.cpu_count(),
+		env_count=2,
 	)

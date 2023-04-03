@@ -1,3 +1,5 @@
+from multiprocessing import Process
+
 import numpy as np
 from tf_agents import trajectories
 from tf_agents.trajectories import PolicyStep, StepType
@@ -170,23 +172,32 @@ class Player:
 				opponent.end_trajectory(True)
 
 	def start_trajectory(self):
-		self.last_time_step = self.game.get_time_step(self)
 		if np.sum(self.dynamic_mask.mask) == 1:
 			self.current_action_is_implicit = True
 			self.last_action = policy_step_cache[np.argmax(self.dynamic_mask.mask)]
 			self.implicit_action_count += 1
 		else:
+			self.last_time_step = self.game.get_time_step(self)
 			self.current_action_is_implicit = False
-			self.last_action = self.agent.act(self.last_time_step, self.game.eval)
+			if self.game.eval:
+				with self.game.lock:
+					self.last_action = self.agent.action(self.last_time_step)
+			else:
+				# process = Process(target=self.agent.collect_action, args=(self.last_time_step,))
+				# process.start()
+				# process.join()
+				with self.game.lock:
+					self.last_action = self.agent.collect_action(self.last_time_step)
 			self.policy_action_count += 1
 
 	def end_trajectory(self, force_log=False):
 		if not self.current_action_is_implicit or force_log:
 			next_time_step = self.game.get_time_step(self)
 			traj = trajectories.from_transition(self.last_time_step, self.last_action, next_time_step)
-			for observer in self.agent.observers:
-				if not self.game.eval:
-					observer(traj, self.game.env_index)
+			# for observer in self.agent.observers:
+			if not self.game.eval:
+				with self.game.lock:
+					self.agent.add_step(traj, self.game.env_index)
 
 	def can_afford(self, trade):
 		return np.all(self.resource_cards + trade >= 0)
@@ -231,7 +242,7 @@ class Player:
 			"implicit_action_ratio": self.policy_action_count / self.implicit_action_count,
 			"longest_road_per_road": self.longest_road / self.road_count.item(),
 			"win_rate_50": self.win_rate(50),
-			"n_step_update": self.agent.n_step_update,
+			"n_step_update": self.agent.get_n_step_update(),
 		}
 		if self.game.winning_player == self:
 			scalars["turn_count"] = self.game.state.turn_number.item()

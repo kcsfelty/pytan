@@ -24,12 +24,12 @@ def train_eval(
 		fc_layer_params=(2**7, 2**6),
 		learning_rate=0.001,
 		n_step_update=50,
-		eps_decay_rate=1 - np.log(2) / 200000,
+		eps_decay_rate=1 - np.log(2) / 100000,
 		min_train_frames=20000,
 
 		# Intervals
 		eval_interval=35000,
-		train_interval=40,
+		train_interval=50,
 		checkpoint_interval=10000,
 	):
 	global_step = tf.Variable(0, trainable=False, dtype=tf.int64)
@@ -90,7 +90,7 @@ if __name__ == "__main__":
 		"env_time_step_spec": train_env.time_step_spec(),
 	}
 
-	policy_half_life_steps = 1000
+	policy_half_life_steps = 5000
 	decay_rate = np.log(2) / policy_half_life_steps
 
 	train_eval(

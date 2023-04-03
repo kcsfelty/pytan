@@ -26,6 +26,8 @@ overall_point_reduction = 0
 time_drain_reward = overall_point_reduction / expected_steps
 
 
+
+
 def reverse_histogram(hist):
 	hist = np.repeat([x for x in range(len(hist))], hist).tolist()
 	rng.shuffle(hist)
@@ -38,7 +40,7 @@ last_step_type = tf.convert_to_tensor(np.expand_dims(StepType.LAST, axis=0))
 
 
 class PyTanFast(PyEnvironment, ABC):
-	def __init__(self, agent_list=None, global_step=None, log_dir="./logs", victory_point_limit=10, condensed_state=False, env_index=None, eval=False):
+	def __init__(self, agent_list=None, global_step=None, log_dir="./logs", victory_point_limit=10, condensed_state=False, env_index=None, eval=False, lock=None):
 		super().__init__()
 
 		# Summaries
@@ -49,6 +51,7 @@ class PyTanFast(PyEnvironment, ABC):
 		# Environment
 		self.env_index = env_index
 		self.eval = eval
+		self.lock = lock
 		self.global_step = global_step
 		self.condensed_state = condensed_state
 		self.state = State(self.condensed_state)
@@ -150,7 +153,7 @@ class PyTanFast(PyEnvironment, ABC):
 
 	def end_game(self):
 		for player in self.player_list:
-			player.agent.write_summary(player.get_episode_summaries(), self.global_step)
+			player.agent.write_summary(player.get_episode_summaries(), int(self.global_step.numpy().item()))
 		self.write_episode_summary()
 		self.episode_number += 1
 

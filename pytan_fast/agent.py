@@ -1,4 +1,5 @@
 import math
+import multiprocessing
 import os
 import time
 
@@ -21,7 +22,7 @@ class FastAgent:
 				 env_specs,
 				 player_index,
 				 log_dir,
-				 global_step,
+				 global_step=None,
 				 train_interval=1,
 				 learning_rate=0.001,
 				 batch_size=1,
@@ -34,7 +35,7 @@ class FastAgent:
 				 gamma=1.0,
 				 epsilon_greedy=None,
 				 eps_min=0.2,
-				 eps_start=0.5,
+				 eps_start=0.4,
 				 eps_decay_rate=0.9999,
 				 checkpoint_dir="checkpoints",
 				 checkpoint_interval=10000,
@@ -102,7 +103,7 @@ class FastAgent:
 		# self.categorical_q_net.summary()
 		self.agent.initialize()
 
-		if env_count:
+		if env_count is not None:
 			self.replay_buffer_list = []
 			self.dataset_list = []
 			self.iterator_list = []
@@ -138,15 +139,15 @@ class FastAgent:
 			self.iterator = iter(self.dataset)
 		self.observers = [self.add_step]
 
-		self.checkpointer = common.Checkpointer(
-			ckpt_dir=os.path.join(checkpoint_dir, self.agent_prefix),
-			max_to_keep=1,
-			policy=self.agent.policy,
-			# replay_buffer=self.replay_buffer,
-			train_step_counter=self.train_step_counter,
-			step_counter=self.step_counter)
-
-		self.checkpointer.initialize_or_restore()
+		# self.checkpointer = common.Checkpointer(
+		# 	ckpt_dir=os.path.join(checkpoint_dir, self.agent_prefix),
+		# 	max_to_keep=1,
+		# 	policy=self.agent.policy,
+		# 	# replay_buffer=self.replay_buffer,
+		# 	train_step_counter=self.train_step_counter,
+		# 	step_counter=self.step_counter)
+		#
+		# self.checkpointer.initialize_or_restore()
 
 		self.log_dir = log_dir
 		self.writer = tf.compat.v2.summary.create_file_writer(os.path.join(self.log_dir, self.agent_prefix))
@@ -162,15 +163,15 @@ class FastAgent:
 		self.epsilon = self.eps_min + self.eps_cof * self.eps_start
 
 	def add_step(self, step, env_index=None):
-		if env_index:
+		if env_index is not None:
 			self.replay_buffer_list[env_index].add_batch(step)
 		else:
 			self.replay_buffer.add_batch(step)
 		self.step_counter.assign_add(1)
 		self.update_epsilon()
 
-		# if not self.replay_buffer.num_frames() < self.min_train_frames:
-		if not self.step_counter.numpy().item() < self.min_train_frames:
+		if not self.replay_buffer_list[env_index].num_frames() < self.min_train_frames:
+		# if not self.step_counter.numpy().item() < self.min_train_frames:
 			if self.step_counter.numpy() % self.train_interval == 0:
 				self.train(env_index)
 
@@ -185,10 +186,20 @@ class FastAgent:
 		# if self.step_counter.numpy() % 25000 == 0:
 		# 	self.reduce_n()
 
+	def get_n_step_update(self):
+		return self.n_step_update
+
 	def act(self, time_step, eval=False):
 		if eval:
 			return self.agent.policy.action(time_step)
 		return self.agent.collect_policy.action(time_step)
+
+	def collect_action(self, time_step):
+		return self.agent.collect_policy.action(time_step)
+		# callback(self.agent.collect_policy.action(time_step))
+
+	def action(self, time_step):
+		return self.agent.policy.action(time_step)
 
 	def write_summary(self, summaries, step):
 		with self.writer.as_default():
@@ -196,16 +207,16 @@ class FastAgent:
 				tf.summary.scalar(
 					name=summary_key,
 					data=summaries["scalars"][summary_key],
-					step=step.numpy().item())
+					step=step)
 			for summary_key in summaries["histograms"]:
 				tf.summary.histogram(
 					name=summary_key,
 					data=summaries["histograms"][summary_key],
-					step=step.numpy().item(),
+					step=step,
 					buckets=len(summaries["histograms"][summary_key]))
 
 	def train(self, env_index):
-		if env_index:
+		if env_index is not None:
 			exp, _ = next(self.iterator_list[env_index])
 		else:
 			exp, _ = next(self.iterator)
@@ -240,7 +251,8 @@ class FastAgent:
 			self.agent._train_sequence_length -= 1
 
 	def checkpoint(self):
-		self.checkpointer.save(global_step=self.global_step.numpy().item())
+		pass
+		# self.checkpointer.save(global_step=self.global_step.numpy().item())
 
 	def eval(self):
 		pass
