@@ -190,6 +190,8 @@ class Handler:
 			if self.game.state.build_phase[game_index]:
 				# print("build phase over")
 				self.game.state.build_phase[game_index].fill(False)
+				for player in self.game.player_list:
+					player.static_mask.can(df.buy_development_card, game_index)
 			next_player_index = next(self.game.player_cycle[game_index])
 		next_player = self.game.player_list[next_player_index]
 		# self.game.state.current_player_index[game_index].fill(next_player.index)

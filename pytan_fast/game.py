@@ -83,32 +83,32 @@ class PyTanFast(PyEnvironment, ABC):
 		self.player_trades_this_turn = [0] * game_count
 		self.resolve_road_building_count = [0] * game_count
 
+		self._action_spec = (BoundedArraySpec(
+			shape=(game_count,),
+			dtype=np.int32,
+			minimum=0,
+			maximum=action_count - 1,
+			name='action'),) * player_count
+
 		self._discount_spec = BoundedArraySpec(
 			shape=(game_count,),
 			dtype=np.float32,
 			minimum=0.,
 			maximum=1.,
 			name='discount')
-		self._action_spec = BoundedArraySpec(
-			shape=(game_count,),
-			dtype=np.int32,
-			minimum=0,
-			maximum=action_count - 1,
-			name='action')
 		self._observation_spec = (
 			BoundedArraySpec(
 				shape=(game_count, observation_count,),
 				dtype=np.int32,
 				minimum=0,
-				maximum=2 ** 32 - 1,
+				maximum=127,
 				name='observation'),
 			BoundedArraySpec(
 				shape=(game_count, action_count,),
 				dtype=np.int32,
 				minimum=0,
 				maximum=1,
-				name='action_mask')
-		) * player_count
+				name='action_mask'))
 		self._reward_spec = BoundedArraySpec(
 			shape=(game_count,),
 			dtype=np.float32,
@@ -119,7 +119,6 @@ class PyTanFast(PyEnvironment, ABC):
 			shape=(game_count,),
 			dtype=np.int32,
 			name='step_type')
-
 		self._time_step_spec = TimeStep(
 			step_type=self._step_type_spec,
 			reward=self._reward_spec,
@@ -149,6 +148,9 @@ class PyTanFast(PyEnvironment, ABC):
 
 	def time_step_spec(self) -> TimeStep:
 		return self._time_step_spec
+
+	def should_reset(self, current_time_step) -> bool:
+		return False
 
 	def write_episode_summary(self, game_index):
 		turn = self.state.turn_number[game_index].item()
@@ -257,8 +259,7 @@ class PyTanFast(PyEnvironment, ABC):
 			step_type=self.step_type[player_index],
 			reward=self.reward[player_index],
 			discount=self.discount[player_index],
-			observation=(obs, mask)
-		)
+			observation=(obs, mask))
 
 	def get_time_step(self):
 		return tuple(self.get_player_time_step(player_index) for player_index in range(3))

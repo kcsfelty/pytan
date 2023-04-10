@@ -32,6 +32,7 @@ class MetaAgent:
 
 	def act(self, time_step_list):
 		action_list = []
+		time_step_list = [TimeStep(*time_step_list[i:i+4]) for i in range(0, len(time_step_list), 4)]
 		for agent, time_step in zip(self.agent_list, time_step_list):
 			action_list.append(agent.act(time_step))
 		# actions = tf.map_fn(
@@ -76,7 +77,7 @@ class Agent:
 	def __init__(self,
 				 q_min=-1,
 				 q_max=1,
-				 n_step_update=10,
+				 n_step_update=3,
 				 replay_buffer_size=1000,
 				 learn_rate=0.0001,
 				 fc_layer_params=(2 ** 8, 2 ** 8, 2 ** 7, 2 ** 7, 2 ** 6, 2 ** 6,),
@@ -115,6 +116,7 @@ class Agent:
 
 		self.iterator = iter(self.dataset)
 
+		self.game_count = game_count
 		self.time_step = None
 		self.action = None
 
@@ -142,8 +144,9 @@ class Agent:
 		self.time_step = next_time_step
 
 	def train(self):
-		exp, _ = next(self.iterator)
-		self.agent.train(exp)
+		if self.replay_buffer.num_frames() > self.game_count:
+			exp, _ = next(self.iterator)
+			self.agent.train(exp)
 
 	@staticmethod
 	def sample_logit_distribution(distribution):
@@ -203,7 +206,7 @@ def train_eval(
 		total_steps=1e9,
 		train_interval=1,
 		eval_interval=1,
-		log_interval=10,
+		log_interval=1000,
 	):
 
 	def maybe_train():
