@@ -18,7 +18,7 @@ from tf_agents.utils import common
 from pytan_fast.game import PyTanFast
 from pytan_fast.settings import player_count
 
-support = np.linspace(-10, 10, 51, dtype=np.float32)
+support = np.linspace(-1, 1, 51, dtype=np.float32)
 neg_inf = tf.constant(-np.inf, dtype=tf.float32)
 seed_stream = tfp.util.SeedStream(seed=None, salt='tf_agents_tf_policy')
 
@@ -157,9 +157,6 @@ for step in range(steps):
 		# print("trajectory_acc", str(int(trajectory_acc / total_acc * 100)) + "%")
 		# print("add_batch_acc", str(int(add_batch_acc / total_acc * 100)) + "%")
 		# print("train_counter", train_counter)
-
-# print(cache._completed_episodes())
-# print(cache._get_episode(episode_ids[0]))
 
 end = time.perf_counter()
 delta = end - start
