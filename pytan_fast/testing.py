@@ -48,11 +48,15 @@ def splitter(obs_tuple):
 	return obs, mask
 
 
-game_count = 2000
+game_count = 1000
 steps = 1000000
 action_count = 379
 observation_count = 1402
 n_step_update = 10
+replay_buffer_size = 1000
+learn_rate = 0.0001
+fc_layer_params = (2**8, 2**8, 2**7, 2**7, 2**6, 2**6,)
+log_interval = 300
 batch_size = player_count * game_count
 
 global_step = tf.Variable(0, dtype=tf.int32)
@@ -70,7 +74,7 @@ fake_time_step_spec = TimeStep(step_type_spec, reward_type_spec, discount_type_s
 categorical_q_net = categorical_q_network.CategoricalQNetwork(
 	input_tensor_spec=obs_type_spec,
 	action_spec=fake_action_spec,
-	fc_layer_params=(2**6, 2**6, 2**6, 2**6, 2**6,))
+	fc_layer_params=fc_layer_params)
 
 train_counter = tf.Variable(0, dtype=tf.int32)
 
@@ -79,10 +83,11 @@ agent = categorical_dqn_agent.CategoricalDqnAgent(
 	action_spec=fake_action_spec,
 	categorical_q_network=categorical_q_net,
 	train_step_counter=train_counter,
-	optimizer=tf.compat.v1.train.AdamOptimizer(learning_rate=0.0001),
+	optimizer=tf.compat.v1.train.AdamOptimizer(learning_rate=learn_rate),
 	n_step_update=n_step_update,
 	min_q_value=-1,
 	max_q_value=1,
+	summarize_grads_and_vars=True,
 	observation_and_action_constraint_splitter=splitter)
 
 
@@ -98,7 +103,7 @@ total_acc = 0
 replay_buffer = TFUniformReplayBuffer(
 	data_spec=agent.collect_data_spec,
 	batch_size=batch_size,
-	max_length=500
+	max_length=replay_buffer_size
 )
 
 dataset = replay_buffer.as_dataset(
@@ -108,10 +113,8 @@ dataset = replay_buffer.as_dataset(
 ).prefetch(3)
 iterator = iter(dataset)
 
-log_interval = 300
 last_step = 0
 last_log = time.time()
-
 
 for step in range(steps):
 	action = get_player_actions(time_step)
@@ -135,7 +138,7 @@ for step in range(steps):
 		last_step = current_step
 		last_log = now
 
-		print(current_step, "of", steps * game_count, str(int(step / steps * 100)) + "%", "rate", delta, "train:", train_counter.numpy().item())
+		print(global_step.numpy().item(), str(int(step / steps * 100)) + "%", "rate", delta, "train:", train_counter.numpy().item())
 		next_log = time.time() + log_interval
 		total_acc = time_step_acc + next_steps_acc + add_batch_acc
 

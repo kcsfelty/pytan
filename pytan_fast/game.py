@@ -44,7 +44,8 @@ class PyTanFast(PyEnvironment, ABC):
 		# Summaries
 		self.log_dir = log_dir + "/game"
 		self.episode_number = 0
-		self.writer = tf.compat.v2.summary.create_file_writer(self.log_dir)
+		# self.writer = tf.compat.v2.summary.create_file_writer(self.log_dir)
+		self.writer = tf.summary.create_file_writer(logdir=self.log_dir)
 
 		# Environment
 		self.step_type = np.ones((player_count, self.game_count), dtype=np.int32)
@@ -64,7 +65,6 @@ class PyTanFast(PyEnvironment, ABC):
 			self.player_list = [Player(
 				index=player_index,
 				game=self,
-				# agent=self.agent_list[player_index],
 				private_state=self.state.private_state_slices[player_index],
 				public_state=self.state.public_state_slices[player_index],
 			) for player_index in range(player_count)]
