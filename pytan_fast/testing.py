@@ -20,156 +20,227 @@ neg_inf = tf.constant(-np.inf, dtype=tf.float32)
 seed_stream = tfp.util.SeedStream(seed=None, salt='tf_agents_tf_policy')
 
 
-@tf.function
-def get_actions(obs_tuple):
-	obs, mask = obs_tuple
-	q_logits = categorical_q_net(obs)[0]
-	q_values = common.convert_q_logits_to_values(q_logits, support)
-	logits = tf.compat.v2.where(tf.cast(mask, tf.bool), q_values, neg_inf)
-	dist = tfp.distributions.Categorical(logits=logits, dtype=tf.float32)
-	return tf.nest.map_structure(
-		lambda d: reparameterized_sampling.sample(d, seed=seed_stream()), dist)
+class MetaAgent:
+	def __init__(self, agent_list, game_count):
+		self.agent_list = agent_list
+		self.agent_count = len(self.agent_list)
+		self.game_count = game_count
+
+	def train(self):
+		for agent in self.agent_list:
+			agent.train()
+
+	def act(self, time_step_list):
+		action_list = []
+		for agent, time_step in zip(self.agent_list, time_step_list):
+			action_list.append(agent.act(time_step))
+		# actions = tf.map_fn(
+		# 	lambda a, ts: a.act(ts),
+		# 	(self.agent_list, time_step),
+		# 	fn_output_signature=tf.TensorSpec((self.agent_count, self.game_count,), dtype=tf.float32))
+		# actions = tf.cast(actions, dtype=tf.int32)
+		return action_list
+
+	# @tf.function
+	# def act_agent(self, agent, time_step):
+	# 	return agent.act(time_step)
+	#
+	# @tf.function
+	# def split_time_step(self, time_step):
+	# 	obs, mask = time_step.observation
+	# 	split_observation = tf.split(obs, self.agent_count)
+	# 	split_mask = tf.split(mask, self.agent_count)
+	# 	split_step_type = tf.split(time_step.step_type, self.agent_count)
+	# 	split_discount = tf.split(time_step.discount, self.agent_count)
+	# 	split_reward = tf.split(time_step.reward, self.agent_count)
+	# 	return tf.map_fn(
+	# 		self.merge_time_step,
+	# 		split_observation,
+	# 		split_mask,
+	# 		split_step_type,
+	# 		split_discount,
+	# 		split_reward,
+	# 		fn_output_signature=tf.TensorSpec((self.game_count,), dtype=tf.float32))
+	#
+	# @tf.function
+	# def merge_time_step(self, split_observation, split_mask, split_step_type, split_discount, split_reward):
+	# 	return TimeStep(
+	# 		step_type=split_step_type,
+	# 		reward=split_reward,
+	# 		discount=split_discount,
+	# 		observation=(split_observation, split_mask)
+	# 	)
 
 
-@tf.function
-def get_player_actions(time_step):
-	obs_list, mask_list = time_step.observation
-	obs_list = tf.reshape(obs_list, (player_count, game_count, -1))
-	mask_list = tf.reshape(mask_list, (player_count, game_count, -1))
-	actions = tf.map_fn(get_actions, (obs_list, mask_list), fn_output_signature=tf.TensorSpec((game_count,), dtype=tf.float32))
-	actions = tf.cast(actions, dtype=tf.int32)
-	return actions
+class Agent:
+	def __init__(self,
+				 q_min=-1,
+				 q_max=1,
+				 n_step_update=10,
+				 replay_buffer_size=1000,
+				 learn_rate=0.0001,
+				 fc_layer_params=(2 ** 8, 2 ** 8, 2 ** 7, 2 ** 7, 2 ** 6, 2 ** 6,),
+				 game_count=1,
+	):
+		self.categorical_q_net = categorical_q_network.CategoricalQNetwork(
+			input_tensor_spec=obs_type_spec,
+			action_spec=fake_action_spec,
+			fc_layer_params=fc_layer_params)
+
+		self.train_counter = tf.Variable(0, dtype=tf.int32)
+
+		self.agent = categorical_dqn_agent.CategoricalDqnAgent(
+			time_step_spec=fake_time_step_spec,
+			action_spec=fake_action_spec,
+			categorical_q_network=self.categorical_q_net,
+			train_step_counter=self.train_counter,
+			optimizer=tf.compat.v1.train.AdamOptimizer(learning_rate=learn_rate),
+			n_step_update=n_step_update,
+			min_q_value=q_min,
+			max_q_value=q_max,
+			summarize_grads_and_vars=True,
+			observation_and_action_constraint_splitter=self.splitter)
+
+		self.replay_buffer = TFUniformReplayBuffer(
+			data_spec=self.agent.collect_data_spec,
+			batch_size=game_count,
+			max_length=replay_buffer_size
+		)
+
+		self.dataset = self.replay_buffer.as_dataset(
+			num_parallel_calls=3,
+			sample_batch_size=game_count,
+			num_steps=n_step_update + 1,
+		).prefetch(3)
+
+		self.iterator = iter(self.dataset)
+
+		self.time_step = None
+		self.action = None
+
+	@tf.function
+	def act(self, time_step):
+		obs, mask = time_step.observation
+		activations = self.categorical_q_net(obs)[0]
+		q_values = common.convert_q_logits_to_values(activations, support)
+		logits = tf.compat.v2.where(tf.cast(mask, tf.bool), q_values, neg_inf)
+		dist = tfp.distributions.Categorical(logits=logits, dtype=tf.float32)
+		action = tf.nest.map_structure(self.sample_logit_distribution, dist)
+		action = tf.cast(action, dtype=tf.int32)
+		action = PolicyStep(action)
+		self.action = action
+		return action
+
+	def add_batch(self, next_time_step):
+		if not self.time_step:
+			self.time_step = next_time_step
+			return
+		self.replay_buffer.add_batch(trajectory.from_transition(
+			self.time_step,
+			self.action,
+			next_time_step))
+		self.time_step = next_time_step
+
+	def train(self):
+		exp, _ = next(self.iterator)
+		self.agent.train(exp)
+
+	@staticmethod
+	def sample_logit_distribution(distribution):
+		return reparameterized_sampling.sample(distribution, seed=seed_stream())
+
+	@staticmethod
+	def splitter(obs_tuple):
+		obs, mask = obs_tuple
+		return obs, mask
 
 
-def splitter(obs_tuple):
-	obs, mask = obs_tuple
-	return obs, mask
-
-
-game_count = 1000
-steps = 1000000
 action_count = 379
 observation_count = 1402
-n_step_update = 10
-replay_buffer_size = 1000
-learn_rate = 0.0001
-fc_layer_params = (2**8, 2**8, 2**7, 2**7, 2**6, 2**6,)
-log_interval = 300
-batch_size = player_count * game_count
-
-global_step = tf.Variable(0, dtype=tf.int32)
-game = PyTanFast(game_count=game_count, global_step=global_step)
-tf_game = tf_py_environment.TFPyEnvironment(game)
-
-fake_action_spec = BoundedTensorSpec(shape=(), dtype=tf.int32, name='action_mask', minimum=np.array(0), maximum=np.array(action_count - 1))
-step_type_spec = TensorSpec(shape=(), dtype=tf.int32, name='step_type')
-reward_type_spec = BoundedTensorSpec(shape=(), dtype=tf.float32, name='reward', minimum=np.array(-1., dtype=np.float32), maximum=np.array(1., dtype=np.float32))
-discount_type_spect = BoundedTensorSpec(shape=(), dtype=tf.float32, name='discount', minimum=np.array(0., dtype=np.float32), maximum=np.array(1., dtype=np.float32))
-obs_type_spec = BoundedTensorSpec(shape=(observation_count,), dtype=tf.int32, name='observation', minimum=np.array(0), maximum=np.array(128))
-mask_type_spec = BoundedTensorSpec(shape=(action_count,), dtype=tf.int32, name='action_mask', minimum=np.array(0), maximum=np.array(1))
-fake_time_step_spec = TimeStep(step_type_spec, reward_type_spec, discount_type_spect, (obs_type_spec, mask_type_spec))
-
-categorical_q_net = categorical_q_network.CategoricalQNetwork(
-	input_tensor_spec=obs_type_spec,
-	action_spec=fake_action_spec,
-	fc_layer_params=fc_layer_params)
-
-train_counter = tf.Variable(0, dtype=tf.int32)
-
-agent = categorical_dqn_agent.CategoricalDqnAgent(
-	time_step_spec=fake_time_step_spec,
-	action_spec=fake_action_spec,
-	categorical_q_network=categorical_q_net,
-	train_step_counter=train_counter,
-	optimizer=tf.compat.v1.train.AdamOptimizer(learning_rate=learn_rate),
-	n_step_update=n_step_update,
-	min_q_value=-1,
-	max_q_value=1,
-	summarize_grads_and_vars=True,
-	observation_and_action_constraint_splitter=splitter)
-
-
-time_step = tf_game.current_time_step()
-start = time.perf_counter()
-
-time_step_acc = 0
-next_steps_acc = 0
-trajectory_acc = 0
-add_batch_acc = 0
-total_acc = 0
-
-replay_buffer = TFUniformReplayBuffer(
-	data_spec=agent.collect_data_spec,
-	batch_size=batch_size,
-	max_length=replay_buffer_size
-)
-
-dataset = replay_buffer.as_dataset(
-	num_parallel_calls=3,
-	sample_batch_size=batch_size,
-	num_steps=n_step_update + 1,
-).prefetch(3)
-iterator = iter(dataset)
-
-last_step = 0
-last_log = time.time()
-
-for step in range(steps):
-	action = get_player_actions(time_step)
-	next_time_step = tf_game.step(action)
-	action_flat = tf.reshape(action, (1, player_count * game_count))[0]
-	replay_buffer.add_batch(trajectory.from_transition(
-		time_step,
-		PolicyStep(action_flat),
-		next_time_step))
-	time_step = next_time_step
-
-	if replay_buffer.num_frames() > batch_size * n_step_update:
-		exp, _ = next(iterator)
-		agent.train(exp)
-
-	now = time.time()
-	if now > last_log + log_interval:
-		current_step = step * game_count
-		delta = (current_step - last_step) / (now - last_log)
-
-		last_step = current_step
-		last_log = now
-
-		print(global_step.numpy().item(), str(int(step / steps * 100)) + "%", "rate", delta, "train:", train_counter.numpy().item())
-		next_log = time.time() + log_interval
-		total_acc = time_step_acc + next_steps_acc + add_batch_acc
-
-end = time.perf_counter()
-delta = end - start
-print()
-print("duration", delta)
-print("steps", steps * game_count)
-print("rate", steps * game_count / delta, "steps/s")
-
-print()
-print()
-print("time_step_acc", time_step_acc)
-print("next_steps_acc", next_steps_acc)
-print("add_batch_acc", add_batch_acc)
+fake_action_spec = BoundedTensorSpec(
+	shape=(),
+	dtype=tf.int32,
+	name='action_mask',
+	minimum=np.array(0),
+	maximum=np.array(action_count - 1))
+step_type_spec = TensorSpec(
+	shape=(),
+	dtype=tf.int32,
+	name='step_type')
+reward_type_spec = BoundedTensorSpec(
+	shape=(),
+	dtype=tf.float32,
+	name='reward',
+	minimum=np.array(-1., dtype=np.float32),
+	maximum=np.array(1., dtype=np.float32))
+discount_type_spec = BoundedTensorSpec(
+	shape=(),
+	dtype=tf.float32,
+	name='discount',
+	minimum=np.array(0., dtype=np.float32),
+	maximum=np.array(1., dtype=np.float32))
+obs_type_spec = BoundedTensorSpec(
+	shape=(observation_count,),
+	dtype=tf.int32,
+	name='observation',
+	minimum=np.array(0),
+	maximum=np.array(128))
+mask_type_spec = BoundedTensorSpec(
+	shape=(action_count,),
+	dtype=tf.int32,
+	name='action_mask',
+	minimum=np.array(0),
+	maximum=np.array(1))
+fake_time_step_spec = TimeStep(
+	step_type_spec,
+	reward_type_spec,
+	discount_type_spec,
+	(obs_type_spec, mask_type_spec))
 
 
+def train_eval(
+		game_count=1000,
+		total_steps=1e9,
+		train_interval=1,
+		eval_interval=1,
+		log_interval=10,
+	):
+
+	def maybe_train():
+		if global_step.numpy() % train_interval == 0:
+			meta.train()
+
+	def maybe_eval():
+		if global_step.numpy() % eval_interval == 0:
+			pass
+
+	def maybe_log():
+		if global_step.numpy() % log_interval == 0:
+			step = global_step.numpy().item()
+			log_str = ""
+			log_str += str(step)
+			log_str += "\t"
+			log_str += str(int(step / total_steps * 100))
+			log_str += "%"
+			log_str += "\t"
+			print(log_str)
+
+	def run():
+		time_step = env.current_time_step()
+		while global_step.numpy() < total_steps:
+			action = meta.act(time_step)
+			time_step = env.step(action)
+			maybe_train()
+			maybe_eval()
+			maybe_log()
+
+	global_step = tf.Variable(0, dtype=tf.int32)
+	game = PyTanFast(game_count=game_count, global_step=global_step)
+	env = tf_py_environment.TFPyEnvironment(game)
+	agent_list = [Agent(game_count=game_count) for _ in range(player_count)]
+	meta = MetaAgent(agent_list, game_count)
+	run()
 
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
+if __name__ == "__main__":
+	train_eval()

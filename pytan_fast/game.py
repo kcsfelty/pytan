@@ -19,10 +19,6 @@ from util.Dice import Dice
 
 rng = np.random.default_rng()
 
-expected_steps = 1800
-overall_point_reduction = 0
-time_drain_reward = overall_point_reduction / expected_steps
-
 action_count = 379
 observation_count = 1402
 
@@ -34,7 +30,7 @@ def reverse_histogram(hist):
 
 
 class PyTanFast(PyEnvironment, ABC):
-	def __init__(self,  game_count=1, global_step=None, log_dir="./logs", victory_point_limit=10, condensed_state=False, env_index=None, eval=False, lock=None):
+	def __init__(self,  game_count=1, global_step=None, log_dir="./logs"):
 
 		super(PyTanFast, self).__init__(
 			handle_auto_reset=True
@@ -44,22 +40,16 @@ class PyTanFast(PyEnvironment, ABC):
 		# Summaries
 		self.log_dir = log_dir + "/game"
 		self.episode_number = 0
-		# self.writer = tf.compat.v2.summary.create_file_writer(self.log_dir)
 		self.writer = tf.summary.create_file_writer(logdir=self.log_dir)
 
 		# Environment
 		self.step_type = np.ones((player_count, self.game_count), dtype=np.int32)
 		self.reward = np.zeros((player_count, self.game_count), dtype=np.float32)
 		self.discount = np.ones((player_count, self.game_count), dtype=np.float32)
-		self.env_index = env_index
-		self.eval = eval
-		self.lock = lock
 		self.global_step = global_step
-		self.condensed_state = condensed_state
 		self.state = State(self.game_count, player_count)
 		self.board = Board(self.state, self)
 		self.player_list = None
-		self.victory_point_limit = victory_point_limit
 
 		if not self.player_list:
 			self.player_list = [Player(
@@ -75,7 +65,6 @@ class PyTanFast(PyEnvironment, ABC):
 						player.other_players.append(other_player)
 
 		self.handler = Handler(self)
-		self.immediate_play = [[]] * game_count
 		self.dice = Dice()
 
 		# Driver helpers
@@ -94,23 +83,49 @@ class PyTanFast(PyEnvironment, ABC):
 		self.player_trades_this_turn = [0] * game_count
 		self.resolve_road_building_count = [0] * game_count
 
-		batch_size = player_count * game_count
-
-		self._discount_spec = BoundedArraySpec(shape=(batch_size,), dtype=np.float32, minimum=0., maximum=1., name='discount')
-		self._action_spec = BoundedArraySpec(shape=(batch_size,), dtype=np.int32, minimum=0, maximum=action_count - 1, name='action')
+		self._discount_spec = BoundedArraySpec(
+			shape=(game_count,),
+			dtype=np.float32,
+			minimum=0.,
+			maximum=1.,
+			name='discount')
+		self._action_spec = BoundedArraySpec(
+			shape=(game_count,),
+			dtype=np.int32,
+			minimum=0,
+			maximum=action_count - 1,
+			name='action')
 		self._observation_spec = (
-			BoundedArraySpec(shape=(batch_size, observation_count,), dtype=np.int32, minimum=0, maximum=128, name='observation'),
-			BoundedArraySpec(shape=(batch_size, action_count,), dtype=np.int32, minimum=0, maximum=1, name='action_mask')
-		)
-		self._reward_spec = BoundedArraySpec(shape=(batch_size,), dtype=np.float32, minimum=-1., maximum=1., name='reward')
-		self._step_type_spec = ArraySpec((batch_size,), np.int32, name='step_type')
+			BoundedArraySpec(
+				shape=(game_count, observation_count,),
+				dtype=np.int32,
+				minimum=0,
+				maximum=2 ** 32 - 1,
+				name='observation'),
+			BoundedArraySpec(
+				shape=(game_count, action_count,),
+				dtype=np.int32,
+				minimum=0,
+				maximum=1,
+				name='action_mask')
+		) * player_count
+		self._reward_spec = BoundedArraySpec(
+			shape=(game_count,),
+			dtype=np.float32,
+			minimum=-1.,
+			maximum=1.,
+			name='reward')
+		self._step_type_spec = ArraySpec(
+			shape=(game_count,),
+			dtype=np.int32,
+			name='step_type')
 
 		self._time_step_spec = TimeStep(
 			step_type=self._step_type_spec,
 			reward=self._reward_spec,
 			discount=self._discount_spec,
 			observation=self._observation_spec
-		)
+		) * player_count
 
 	@property
 	def batched(self) -> bool:
@@ -230,18 +245,20 @@ class PyTanFast(PyEnvironment, ABC):
 			out=first_player.dynamic_mask.place_settlement[game_index])
 
 	def get_observation(self):
-		obs = [self.state.for_player(player_index) for player_index in range(player_count)]
-		obs = np.array(obs)
-		obs.shape = (self.batch_size, -1)
-		mask = [self.player_list[player_index].dynamic_mask.mask for player_index in range(player_count)]
-		mask = np.array(mask)
-		mask.shape = (self.batch_size, -1)
-		return obs, mask
+		obs_list = [self.state.for_player(player_index) for player_index in range(player_count)]
+		mask_list = [self.player_list[player_index].dynamic_mask.mask for player_index in range(player_count)]
+		observation = [(np.array(obs), np.array(mask)) for obs, mask in zip(obs_list, mask_list)]
+		return observation
+
+	def get_player_time_step(self, player_index):
+		obs = self.state.for_player(player_index)
+		mask = self.player_list[player_index].dynamic_mask.mask
+		return TimeStep(
+			step_type=self.step_type[player_index],
+			reward=self.reward[player_index],
+			discount=self.discount[player_index],
+			observation=(obs, mask)
+		)
 
 	def get_time_step(self):
-		return TimeStep(
-				self.step_type.flatten(),
-				self.reward.flatten(),
-				self.discount.flatten(),
-				self.get_observation()
-			)
+		return tuple(self.get_player_time_step(player_index) for player_index in range(3))
