@@ -1,6 +1,7 @@
 import random
 from abc import ABC
 from itertools import cycle
+from typing import Tuple
 
 import numpy as np
 import tensorflow as tf
@@ -30,7 +31,7 @@ def reverse_histogram(hist):
 
 
 class PyTanFast(PyEnvironment, ABC):
-	def __init__(self,  game_count=1, global_step=None, log_dir="./logs"):
+	def __init__(self, game_count=1, global_step=None, log_dir="./logs"):
 
 		super(PyTanFast, self).__init__(
 			handle_auto_reset=True
@@ -157,21 +158,17 @@ class PyTanFast(PyEnvironment, ABC):
 		step = self.num_step[game_index]
 		global_step = self.global_step.numpy().item()
 		summary = ""
-		summary += "[env{}]".format(str(game_index).rjust(5))
-		summary += "Game finished"
-		summary += str(turn).rjust(5)
-		summary += " turns, "
-		summary += str(step).rjust(6)
-		summary += ", "
-		summary += str(self.winning_player[game_index])
-		summary += ", "
-		summary += str(global_step)
+		summary += "[env:{}] ".format(str(game_index).rjust(5))
+		summary += "[turns:{}] ".format(str(turn).rjust(5))
+		summary += "[steps:{}] ".format(str(step).rjust(6))
+		summary += "[global:{}]   ".format(str(global_step).rjust(10))
+		summary += str(self.winning_player[game_index].for_game(game_index))
 		print(summary)
 
 		with self.writer.as_default(step=global_step):
 			tf.summary.scalar(name="turn_count", data=turn)
 
-	def _step(self, action_list: types.NestedArray) -> TimeStep:
+	def _step(self, action_list: types.NestedArray) -> tuple[TimeStep, ...]:
 		self.step_type = np.ones((player_count, self.game_count), dtype=np.int32)
 		self.reward = np.zeros((player_count, self.game_count), dtype=np.float32)
 		self.discount = np.ones((player_count, self.game_count), dtype=np.float32)
@@ -228,7 +225,6 @@ class PyTanFast(PyEnvironment, ABC):
 		for vertex in self.board.vertices: vertex.reset(game_index)
 		for edge in self.board.edges: edge.reset(game_index)
 
-		# Get the game ready
 		for player in self.player_list:
 			player.dynamic_mask.only(df.no_action, game_index)
 

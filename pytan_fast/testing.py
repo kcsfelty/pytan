@@ -221,11 +221,9 @@ def train_eval(
 		if global_step.numpy() % log_interval == 0:
 			step = global_step.numpy().item()
 			log_str = ""
-			log_str += str(step)
+			log_str += "[global: {}]".format(str(step).rjust(10))
 			log_str += "\t"
-			log_str += str(int(step / total_steps * 100))
-			log_str += "%"
-			log_str += "\t"
+			log_str += "[pct: {}%]".format(str(int(step / total_steps * 100)))
 			print(log_str)
 
 	def run():

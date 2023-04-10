@@ -31,6 +31,18 @@ class Player:
 		# 	str(int(self.policy_action_count / (self.implicit_action_count + 1e-9) * 1e2))
 		# )
 
+	def for_game(self, game_index):
+		return "Player{} S={} C={} R={} VC={} LA={}{} LR={}{}".format(
+			self.index,
+			str(int(self.settlement_count[game_index])).ljust(3),
+			str(int(self.city_count[game_index])).ljust(3),
+			str(int(self.road_count[game_index])).ljust(3),
+			str(self.development_cards_played[game_index][gs.victory_point_card_index].item()).ljust(2),
+			str(self.development_cards_played[game_index][gs.knight_index]).rjust(2),
+			"*" if self.owns_largest_army[game_index] else " ",
+			str(self.longest_road[game_index].item()).rjust(2),
+			"*" if self.owns_longest_road[game_index] else " ")
+
 	def __str__(self):
 		return self.__repr__()
 
@@ -41,10 +53,6 @@ class Player:
 		self.static_mask = Mask(self.game.game_count)
 		self.private_state = private_state
 		self.public_state = public_state
-		# self.agent = agent
-		# self.policy = agent.get_policy() if self.agent else None
-		# self.last_time_step = None
-		# self.last_action = None
 
 		self.current_player = self.public_state[df.current_player]
 		self.must_move_robber = self.public_state[df.must_move_robber]
@@ -68,9 +76,6 @@ class Player:
 		self.resource_cards = self.private_state[df.resource_type_count]
 		self.development_cards = self.private_state[df.development_type_count]
 		self.development_card_bought_this_turn = self.private_state[df.development_type_bought_count]
-		# self.settlement_indices = self.public_state[df.settlement_indices]
-		# self.city_indices = self.public_state[df.city_indices]
-		# self.road_indices = self.public_state[df.road_indices]
 
 		# Helper fields
 		self.other_players = []
@@ -94,7 +99,6 @@ class Player:
 		self.player_trade_total = np.zeros((self.game.game_count, gs.resource_type_count))
 
 		# Histograms
-		# self.action_count = []
 		self.starting_distribution = np.zeros((self.game.game_count, gs.resource_type_count))
 
 	def reset(self, game_index):
@@ -103,9 +107,6 @@ class Player:
 		self.edge_list[game_index] = []
 		self.actual_victory_points[game_index] = 0
 		self.episode_rewards = 0
-		# self.next_reward = 0
-		# self.current_action_is_implicit = False
-		# self.action_count = []
 		self.distribution_total[game_index].fill(0)
 		self.steal_total[game_index].fill(0)
 		self.stolen_total[game_index].fill(0)
@@ -115,35 +116,30 @@ class Player:
 		self.starting_distribution[game_index].fill(0)
 		self.dynamic_mask.reset(game_index)
 		self.static_mask.reset(game_index)
-		# self.resource_tuple = tuple(self.resource_cards)
-		# self.resource_port_tuple = tuple(self.resource_cards * self.port_access[:5])
 
 	def set_longest_road(self, has, game_index):
-		self.game.state.owns_longest_road_index = self.index
 		if has:
 			self.game.longest_road_owner[game_index] = self
 			self.change_victory_points(gs.longest_road_victory_points, game_index)
-			self.owns_longest_road.fill(1)
+			self.owns_longest_road[game_index].fill(1)
 		else:
 			self.game.longest_road_owner[game_index] = None
 			self.change_victory_points(-1 * gs.longest_road_victory_points, game_index)
-			self.owns_longest_road.fill(0)
+			self.owns_longest_road[game_index].fill(0)
 
 	def largest_army(self, has, game_index):
-		self.game.state.owns_largest_army_index = self.index
 		if has:
 			self.game.largest_army_owner[game_index] = self
 			self.change_victory_points(gs.largest_army_victory_points, game_index)
-			self.owns_largest_army.fill(1)
+			self.owns_largest_army[game_index].fill(1)
 			np.copyto(self.game.state.largest_army_size[game_index], self.development_cards_played[game_index][gs.knight_index])
 		else:
 			self.game.longest_road_owner[game_index] = None
 			self.change_victory_points(-1 * gs.largest_army_victory_points, game_index)
-			self.owns_largest_army.fill(0)
+			self.owns_largest_army[game_index].fill(0)
 
 	def change_victory_points(self, change, game_index):
 		self.victory_points[game_index] += change
-		# self.next_reward = change
 		self.check_victory(game_index)
 
 	def check_victory(self, game_index):
@@ -200,7 +196,6 @@ class Player:
 			"implicit_action_ratio": self.policy_action_count / self.implicit_action_count,
 			"longest_road_per_road": self.longest_road / self.road_count.item(),
 			"win_rate_50": self.win_rate(50),
-			# "n_step_update": self.agent.get_n_step_update(),
 		}
 		if self.game.winning_player == self:
 			scalars["turn_count"] = self.game.state.turn_number.item()
