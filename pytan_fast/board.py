@@ -32,31 +32,35 @@ class Board:
 		self.vertex_hash = {vertex: i for vertex, i in zip(self.vertex_list, range(len(self.vertex_list)))}
 		self.edge_hash = {edge: i for edge, i in zip(self.edge_list, range(len(self.edge_list)))}
 
-		self.roll_hash = [[] for _ in gs.roll_list]
+		self.roll_hash = [[[] for _ in gs.roll_list] for _ in range(self.game.game_count)]
 
-		self.robbed_tile = None
+		self.robbed_tile = [None for _ in range(self.game.game_count)]
+
+		self.port_vertex_lookup = [(self.vertex_hash[port_a], self.vertex_hash[port_b]) for port_a, port_b in settings.port_vertex_groups]
 
 		self.tiles = [Tile(
 			key=tile,
 			index=self.tile_hash[tile],
-			has_robber=self.state.tile_has_robber[self.tile_hash[tile]:self.tile_hash[tile]+1],
-			resource=self.state.tile_resource[self.tile_hash[tile], :],
-			roll_number=self.state.tile_roll_number[self.tile_hash[tile], :],
+			batch_size=self.game.batch_size,
+			has_robber=self.state.tile_has_robber[:, self.tile_hash[tile]:self.tile_hash[tile]+1],
+			resource=self.state.tile_resource[:, self.tile_hash[tile], :],
+			roll_number=self.state.tile_roll_number[:, self.tile_hash[tile], :],
 		) for tile in self.tile_list]
 
 		self.vertices = [Vertex(
 			key=vertex,
 			index=self.vertex_hash[vertex],
-			settlement=self.state.vertex_settlement[self.vertex_hash[vertex]:self.vertex_hash[vertex]+1],
-			city=self.state.vertex_city[self.vertex_hash[vertex]:self.vertex_hash[vertex]+1],
-			is_open=self.state.vertex_open[self.vertex_hash[vertex]:self.vertex_hash[vertex]+1],
-			port=self.state.vertex_has_port[self.vertex_hash[vertex]]
+			game_count=self.game.game_count,
+			settlement=self.state.vertex_settlement[:, self.vertex_hash[vertex]:self.vertex_hash[vertex]+1],
+			city=self.state.vertex_city[:, self.vertex_hash[vertex]:self.vertex_hash[vertex]+1],
+			is_open=self.state.vertex_open[:, self.vertex_hash[vertex]:self.vertex_hash[vertex]+1],
+			port=self.state.vertex_has_port[:, self.vertex_hash[vertex]]
 		) for vertex in self.vertex_list]
 
 		self.edges = [Edge(
 			key=edge,
 			index=self.edge_hash[edge],
-			is_open=self.state.edge_open[self.edge_hash[edge]:self.edge_hash[edge]+1],
+			is_open=self.state.edge_open[:, self.edge_hash[edge]:self.edge_hash[edge]+1],
 		) for edge in self.edge_list]
 
 		# Connect adjacent geometries together
@@ -96,28 +100,40 @@ class Board:
 		for edge in self.edges:
 			edge.build_adjacent_edge_vertex()
 
-	def reset(self):
+	def reset(self, game_index, board_layout=None, port_layout=None):
+		# tile_resource_count = reverse_histogram([x for x in settings.tile_resource_count])
+		# tile_roll_number_count = reverse_histogram([x for x in settings.tile_roll_number_count_per_type])
+		# tile_roll_number_count.insert(tile_resource_count.index(desert_index), -1)
+		# self.roll_hash = [[] for _ in gs.roll_list]
+		# self.game.state.tile_resource_index[:] = tile_resource_count
+		# self.game.state.tile_roll_number_index[:] = tile_roll_number_count
+		tile_resource_layout, tile_roll_number_layout = board_layout or self.get_board_layout()
+		for tile, resource_index, roll_index in zip(self.tiles, tile_resource_layout, tile_roll_number_layout):
+			if roll_index != -1:
+				tile.resource[game_index][resource_index] = 1
+				tile.roll_number[game_index][roll_index] = 1
+				tile.resource_index = resource_index
+				self.roll_hash[game_index][roll_index].append(tile)
+			else:
+				tile.has_robber[game_index].fill(1)
+				# self.game.state.tile_has_robber_index.fill(tile.index)
+				self.robbed_tile[game_index] = tile
+
+		# port_type_count = reverse_histogram([x for x in settings.port_type_count_per_type])
+		# port_vertex_groups = [(self.vertex_hash[port_a], self.vertex_hash[port_b]) for port_a, port_b in settings.port_vertex_groups]
+		# self.game.state.port_resource_index[:] = port_type_count
+		port_layout = port_layout or self.get_port_layout()
+		for vertices, port_type in zip(self.port_vertex_lookup, port_layout):
+			vertex_a, vertex_b = vertices
+			self.vertices[vertex_a].port[game_index][port_type] = 1
+			self.vertices[vertex_b].port[game_index][port_type] = 1
+
+	def get_board_layout(self):
 		tile_resource_count = reverse_histogram([x for x in settings.tile_resource_count])
 		tile_roll_number_count = reverse_histogram([x for x in settings.tile_roll_number_count_per_type])
 		tile_roll_number_count.insert(tile_resource_count.index(desert_index), -1)
-		self.roll_hash = [[] for _ in gs.roll_list]
-		self.game.state.tile_resource_index[:] = tile_resource_count
-		self.game.state.tile_roll_number_index[:] = tile_roll_number_count
-		for tile, resource_index, roll_index in zip(self.tiles, tile_resource_count, tile_roll_number_count):
-			if roll_index != -1:
-				tile.resource[resource_index] = 1
-				tile.roll_number[roll_index] = 1
-				tile.resource_index = resource_index
-				self.roll_hash[roll_index].append(tile)
-			else:
-				tile.has_robber.fill(1)
-				self.game.state.tile_has_robber_index.fill(tile.index)
-				self.robbed_tile = tile
+		return tile_resource_count, tile_roll_number_count
 
+	def get_port_layout(self):
 		port_type_count = reverse_histogram([x for x in settings.port_type_count_per_type])
-		port_vertex_groups = [(self.vertex_hash[port_a], self.vertex_hash[port_b]) for port_a, port_b in settings.port_vertex_groups]
-		self.game.state.port_resource_index[:] = port_type_count
-		for vertices, port_type in zip(port_vertex_groups, port_type_count):
-			vertex_a, vertex_b = vertices
-			self.vertices[vertex_a].port[port_type] = 1
-			self.vertices[vertex_b].port[port_type] = 1
+		return port_type_count

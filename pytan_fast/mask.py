@@ -4,13 +4,13 @@ from pytan_fast.action_mapping import action_mapping
 
 
 class Mask:
-	def __init__(self):
-		self.mask = np.zeros(sum([action_mapping[term] for term in action_mapping]), dtype=np.int32)
+	def __init__(self, game_count=1):
+		self.mask = np.zeros((game_count, sum([action_mapping[term] for term in action_mapping])), dtype=np.int32)
 
 		self.mask_slices = {}
 		current_index = 0
 		for term in action_mapping:
-			self.mask_slices[term] = self.mask[current_index:current_index + action_mapping[term]]
+			self.mask_slices[term] = self.mask[:, current_index:current_index + action_mapping[term]]
 			current_index += action_mapping[term]
 
 		self.accept_player_trade = self.mask_slices[df.accept_player_trade]
@@ -36,12 +36,15 @@ class Mask:
 		self.rob_player = self.mask_slices[df.rob_player]
 		self.roll_dice = self.mask_slices[df.roll_dice]
 
-	def only(self, term):
-		self.mask.fill(False)
-		self.mask_slices[term].fill(True)
+	def only(self, term, game_index):
+		self.reset(game_index)
+		self.mask_slices[term][game_index].fill(True)
 
-	def can(self, term):
-		self.mask_slices[term].fill(True)
+	def can(self, term, game_index):
+		self.mask_slices[term][game_index].fill(True)
 
-	def cannot(self, term):
-		self.mask_slices[term].fill(False)
+	def cannot(self, term, game_index):
+		self.mask_slices[term][game_index].fill(False)
+
+	def reset(self, game_index):
+		self.mask[game_index].fill(False)

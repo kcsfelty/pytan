@@ -97,22 +97,53 @@ def train_eval(
 	):
 	manager = get_manager()
 	global_step = manager.GlobalStep()
-	agent_list = [manager[agent_name](
-		player_index=player_index,
-		batch_size=train_interval * replay_ratio,
-		log_dir=log_dir,
-		replay_buffer_capacity=int(replay_buffer_capacity/env_count),
-		fc_layer_params=fc_layer_params,
-		learning_rate=learning_rate,
-		n_step_update=n_step_update,
-		env_specs=env_specs,
-		train_interval=train_interval,
-		checkpoint_interval=checkpoint_interval,
-		eval_interval=eval_interval,
-		eps_decay_rate=eps_decay_rate,
-		min_train_frames=min_train_frames,
-		env_count=env_count
-	) for player_index, agent_name in enumerate(agent_names)]
+	agent_list = [
+		manager.FastAgent0(
+			player_index=0,
+			batch_size=train_interval * replay_ratio,
+			log_dir=log_dir,
+			replay_buffer_capacity=int(replay_buffer_capacity/env_count),
+			fc_layer_params=fc_layer_params,
+			learning_rate=learning_rate,
+			n_step_update=n_step_update,
+			env_specs=env_specs,
+			train_interval=train_interval,
+			checkpoint_interval=checkpoint_interval,
+			eval_interval=eval_interval,
+			eps_decay_rate=eps_decay_rate,
+			min_train_frames=min_train_frames,
+			env_count=env_count),
+		manager.FastAgent1(
+			player_index=1,
+			batch_size=train_interval * replay_ratio,
+			log_dir=log_dir,
+			replay_buffer_capacity=int(replay_buffer_capacity/env_count),
+			fc_layer_params=fc_layer_params,
+			learning_rate=learning_rate,
+			n_step_update=n_step_update,
+			env_specs=env_specs,
+			train_interval=train_interval,
+			checkpoint_interval=checkpoint_interval,
+			eval_interval=eval_interval,
+			eps_decay_rate=eps_decay_rate,
+			min_train_frames=min_train_frames,
+			env_count=env_count),
+		manager.FastAgent2(
+			player_index=2,
+			batch_size=train_interval * replay_ratio,
+			log_dir=log_dir,
+			replay_buffer_capacity=int(replay_buffer_capacity/env_count),
+			fc_layer_params=fc_layer_params,
+			learning_rate=learning_rate,
+			n_step_update=n_step_update,
+			env_specs=env_specs,
+			train_interval=train_interval,
+			checkpoint_interval=checkpoint_interval,
+			eval_interval=eval_interval,
+			eps_decay_rate=eps_decay_rate,
+			min_train_frames=min_train_frames,
+			env_count=env_count)
+	]
 
 	def logging(wait=300):
 		start = time.perf_counter()
@@ -159,6 +190,6 @@ if __name__ == "__main__":
 		eval_interval=policy_half_life_steps * 7,
 		replay_buffer_capacity=500000,
 		replay_ratio=10,
-		# env_count=multiprocessing.cpu_count(),
-		env_count=4,
+		env_count=multiprocessing.cpu_count(),
+		# env_count=4,
 	)

@@ -5,7 +5,7 @@ class Tile:
 	def __repr__(self):
 		return "Tile{}".format(self.key)
 
-	def __init__(self, index, key, has_robber, resource, roll_number):
+	def __init__(self, index, key, batch_size, has_robber, resource, roll_number):
 		self.index = index
 		self.key = key
 		self.tiles = []
@@ -16,7 +16,7 @@ class Tile:
 		self.has_robber = has_robber
 		self.resource = resource
 		self.roll_number = roll_number
-		self.players_to_rob = np.zeros((gs.player_count, gs.player_count), dtype=np.bool8)
+		self.players_to_rob = np.zeros((batch_size, gs.player_count, gs.player_count), dtype=np.bool8)
 
-	def reset(self):
-		self.players_to_rob.fill(False)
+	def reset(self, game_index):
+		self.players_to_rob[game_index].fill(False)

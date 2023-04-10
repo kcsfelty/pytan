@@ -12,37 +12,39 @@ last_step_type = tf.convert_to_tensor(np.expand_dims(StepType.LAST, axis=0))
 
 policy_step_cache = [PolicyStep(action=tf.expand_dims(tf.convert_to_tensor(action_code, dtype=tf.int32), axis=0)) for action_code in range(379)]
 
+
 class Player:
 	def __repr__(self):
-		return "Player{} VP={} R={} D={} | S={} C={} R={} LA={}{} LR={}{} IAR={}%".format(
-			self.index,
-			str(int(self.actual_victory_points)).ljust(2),
-			str(self.resource_cards).ljust(15),
-			str(self.development_cards_played.tolist()).ljust(15),
-			str(int(self.settlement_count)).ljust(3),
-			str(int(self.city_count)).ljust(3),
-			str(int(self.road_count)).ljust(3),
-			str(self.development_cards_played[gs.knight_index]).rjust(2),
-			"+" if self.owns_largest_army else " ",
-			str(self.longest_road).rjust(2),
-			"+" if self.owns_longest_road else " ",
-			str(int(self.policy_action_count / (self.implicit_action_count + 1e-9) * 1e2))
-		)
+		return "<Player{}>".format(self.index)
+		# return "Player{} VP={} R={} D={} | S={} C={} R={} LA={}{} LR={}{} IAR={}%".format(
+		# 	self.index,
+		# 	str(int(self.actual_victory_points)).ljust(2),
+		# 	str(self.resource_cards).ljust(15),
+		# 	str(self.development_cards_played.tolist()).ljust(15),
+		# 	str(int(self.settlement_count)).ljust(3),
+		# 	str(int(self.city_count)).ljust(3),
+		# 	str(int(self.road_count)).ljust(3),
+		# 	str(self.development_cards_played[gs.knight_index]).rjust(2),
+		# 	"+" if self.owns_largest_army else " ",
+		# 	str(self.longest_road).rjust(2),
+		# 	"+" if self.owns_longest_road else " ",
+		# 	str(int(self.policy_action_count / (self.implicit_action_count + 1e-9) * 1e2))
+		# )
 
 	def __str__(self):
 		return self.__repr__()
 
-	def __init__(self, index, agent, game, public_state, private_state):
+	def __init__(self, index, game, public_state, private_state):
 		self.index = index
-		self.dynamic_mask = Mask()
-		self.static_mask = Mask()
 		self.game = game
+		self.dynamic_mask = Mask(self.game.game_count)
+		self.static_mask = Mask(self.game.game_count)
 		self.private_state = private_state
 		self.public_state = public_state
-		self.agent = agent
+		# self.agent = agent
 		# self.policy = agent.get_policy() if self.agent else None
-		self.last_time_step = None
-		self.last_action = None
+		# self.last_time_step = None
+		# self.last_action = None
 
 		self.current_player = self.public_state[df.current_player]
 		self.must_move_robber = self.public_state[df.must_move_robber]
@@ -66,148 +68,104 @@ class Player:
 		self.resource_cards = self.private_state[df.resource_type_count]
 		self.development_cards = self.private_state[df.development_type_count]
 		self.development_card_bought_this_turn = self.private_state[df.development_type_bought_count]
-		self.settlement_indices = self.public_state[df.settlement_indices]
-		self.city_indices = self.public_state[df.city_indices]
-		self.road_indices = self.public_state[df.road_indices]
+		# self.settlement_indices = self.public_state[df.settlement_indices]
+		# self.city_indices = self.public_state[df.city_indices]
+		# self.road_indices = self.public_state[df.road_indices]
 
 		# Helper fields
-		self.edge_list = []
 		self.other_players = []
-		self.actual_victory_points = 0
-		self.episode_rewards = 0
-		self.next_reward = 0
-		self.current_action_is_implicit = False
-		self.edge_proximity_vertices = []
 		self.win_list = []
-		self.resource_tuple = tuple(self.resource_cards)
-		self.resource_port_tuple = tuple(self.resource_cards * self.port_access[:5])
+		self.edge_list = [[] for _ in range(self.game.game_count)]
+		self.actual_victory_points = [0 for _ in range(self.game.game_count)]
+		self.episode_rewards = [[] for _ in range(self.game.game_count)]
+		self.edge_proximity_vertices = [[] for _ in range(self.game.game_count)]
 
 		# Diagnostics / Statistics
-		self.implicit_action_count = 0
-		self.policy_action_count = 0
+		self.implicit_action_count = np.zeros((self.game.game_count,))
+		self.policy_action_count = np.zeros((self.game.game_count,))
 
 		# Summaries
 		# Scalars
-		self.distribution_total = np.zeros(gs.resource_type_count)
-		self.steal_total = np.zeros(gs.resource_type_count)
-		self.stolen_total = np.zeros(gs.resource_type_count)
-		self.discard_total = np.zeros(gs.resource_type_count)
-		self.bank_trade_total = np.zeros(gs.resource_type_count)
-		self.player_trade_total = np.zeros(gs.resource_type_count)
+		self.distribution_total = np.zeros((self.game.game_count, gs.resource_type_count))
+		self.steal_total = np.zeros((self.game.game_count, gs.resource_type_count))
+		self.stolen_total = np.zeros((self.game.game_count, gs.resource_type_count))
+		self.discard_total = np.zeros((self.game.game_count, gs.resource_type_count))
+		self.bank_trade_total = np.zeros((self.game.game_count, gs.resource_type_count))
+		self.player_trade_total = np.zeros((self.game.game_count, gs.resource_type_count))
 
 		# Histograms
-		self.action_count = []
-		self.starting_distribution = np.zeros(gs.resource_type_count)
+		# self.action_count = []
+		self.starting_distribution = np.zeros((self.game.game_count, gs.resource_type_count))
 
-	def reset(self):
-		self.edge_list = []
-		self.implicit_action_count = 0
+	def reset(self, game_index):
 		self.policy_action_count = 0
-		self.actual_victory_points = 0
+		self.implicit_action_count = 0
+		self.edge_list[game_index] = []
+		self.actual_victory_points[game_index] = 0
 		self.episode_rewards = 0
-		self.next_reward = 0
-		self.current_action_is_implicit = False
-		self.action_count = []
-		self.distribution_total = np.zeros(gs.resource_type_count)
-		self.steal_total = np.zeros(gs.resource_type_count)
-		self.stolen_total = np.zeros(gs.resource_type_count)
-		self.discard_total = np.zeros(gs.resource_type_count)
-		self.bank_trade_total = np.zeros(gs.resource_type_count)
-		self.player_trade_total = np.zeros(gs.resource_type_count)
-		self.starting_distribution = np.zeros(gs.resource_type_count)
-		self.dynamic_mask = Mask()
-		self.static_mask = Mask()
-		self.resource_tuple = tuple(self.resource_cards)
-		self.resource_port_tuple = tuple(self.resource_cards * self.port_access[:5])
+		# self.next_reward = 0
+		# self.current_action_is_implicit = False
+		# self.action_count = []
+		self.distribution_total[game_index].fill(0)
+		self.steal_total[game_index].fill(0)
+		self.stolen_total[game_index].fill(0)
+		self.discard_total[game_index].fill(0)
+		self.bank_trade_total[game_index].fill(0)
+		self.player_trade_total[game_index].fill(0)
+		self.starting_distribution[game_index].fill(0)
+		self.dynamic_mask.reset(game_index)
+		self.static_mask.reset(game_index)
+		# self.resource_tuple = tuple(self.resource_cards)
+		# self.resource_port_tuple = tuple(self.resource_cards * self.port_access[:5])
 
-	def set_longest_road(self, has=True):
+	def set_longest_road(self, has, game_index):
 		self.game.state.owns_longest_road_index = self.index
 		if has:
-			self.game.longest_road_owner = self
-			self.change_victory_points(gs.longest_road_victory_points)
+			self.game.longest_road_owner[game_index] = self
+			self.change_victory_points(gs.longest_road_victory_points, game_index)
 			self.owns_longest_road.fill(1)
 		else:
-			self.game.longest_road_owner = None
-			self.change_victory_points(-1 * gs.longest_road_victory_points)
+			self.game.longest_road_owner[game_index] = None
+			self.change_victory_points(-1 * gs.longest_road_victory_points, game_index)
 			self.owns_longest_road.fill(0)
 
-	def largest_army(self, has=True):
+	def largest_army(self, has, game_index):
 		self.game.state.owns_largest_army_index = self.index
 		if has:
-			self.game.largest_army_owner = self
-			self.change_victory_points(gs.largest_army_victory_points)
+			self.game.largest_army_owner[game_index] = self
+			self.change_victory_points(gs.largest_army_victory_points, game_index)
 			self.owns_largest_army.fill(1)
 			np.copyto(self.game.state.largest_army_size, self.development_cards_played[gs.knight_index])
 		else:
-			self.game.longest_road_owner = None
-			self.change_victory_points(-1 * gs.largest_army_victory_points)
+			self.game.longest_road_owner[game_index] = None
+			self.change_victory_points(-1 * gs.largest_army_victory_points, game_index)
 			self.owns_largest_army.fill(0)
 
-	def change_victory_points(self, change):
-		self.victory_points += change
-		self.next_reward = change
-		self.check_victory()
+	def change_victory_points(self, change, game_index):
+		self.victory_points[game_index] += change
+		# self.next_reward = change
+		self.check_victory(game_index)
 
-	def check_victory(self):
-		victory_card_points = gs.victory_point_card_victory_points * self.development_cards[gs.victory_point_card_index]
-		self.actual_victory_points = (victory_card_points + self.victory_points).item()
-		if self.actual_victory_points > self.game.max_victory_points:
-			self.game.max_victory_points = self.actual_victory_points
-		if self.actual_victory_points >= gs.victory_points_to_win:
-			self.development_cards_played[gs.victory_point_card_index] += self.development_cards[gs.victory_point_card_index]
-			self.victory_points += victory_card_points
-			self.next_reward += victory_card_points
-			self.game.winning_player = self
-			self.next_reward += 1.  # Always give at least one reward for a win
-			# self.next_reward += 9 * (1 - np.log(2) / 15) ** (self.game.state.turn_number - 40)
-			self.next_reward += 9.
-			self.next_reward = min(float(self.next_reward), 10)
-			self.game.current_time_step_type = last_step_type
-			self.win_list.append(1)
-			for opponent in self.other_players:
-				opponent.win_list.append(0)
-				opponent.development_cards_played[gs.victory_point_card_index] += opponent.development_cards[gs.victory_point_card_index]
-				opponent.last_action = policy_step_cache[-1]
-				opponent.next_reward -= 5
-				opponent.end_trajectory(True)
+	def check_victory(self, game_index):
+		victory_card_points = gs.victory_point_card_victory_points * self.development_cards[game_index][gs.victory_point_card_index]
+		self.actual_victory_points[game_index] = (victory_card_points + self.victory_points[game_index]).item()
+		if self.actual_victory_points[game_index] >= gs.victory_points_to_win:
+			self.development_cards_played[game_index][gs.victory_point_card_index] += self.development_cards[game_index][gs.victory_point_card_index]
+			self.victory_points[game_index] += victory_card_points
+			self.game.winning_player[game_index] = self
 
-	def start_trajectory(self):
-		if np.sum(self.dynamic_mask.mask) == 1:
-			self.current_action_is_implicit = True
-			self.last_action = policy_step_cache[np.argmax(self.dynamic_mask.mask)]
-			self.implicit_action_count += 1
-		else:
-			self.last_time_step = self.game.get_time_step(self)
-			self.current_action_is_implicit = False
-			if self.game.eval:
-				with self.game.lock:
-					self.last_action = self.agent.action(self.last_time_step)
-			else:
-				# process = Process(target=self.agent.collect_action, args=(self.last_time_step,))
-				# process.start()
-				# process.join()
-				with self.game.lock:
-					self.last_action = self.agent.collect_action(self.last_time_step)
-			self.policy_action_count += 1
+	def can_afford(self, trade, game_index):
+		return np.all(self.resource_cards[game_index] + trade >= 0)
 
-	def end_trajectory(self, force_log=False):
-		if not self.current_action_is_implicit or force_log:
-			next_time_step = self.game.get_time_step(self)
-			traj = trajectories.from_transition(self.last_time_step, self.last_action, next_time_step)
-			# for observer in self.agent.observers:
-			if not self.game.eval:
-				with self.game.lock:
-					self.agent.add_step(traj, self.game.env_index)
+	def apply_static(self, term, game_index):
+		np.logical_and(
+			self.dynamic_mask.mask_slices[term][game_index],
+			self.static_mask.mask_slices[term][game_index],
+			out=self.dynamic_mask.mask_slices[term][game_index])
 
-	def can_afford(self, trade):
-		return np.all(self.resource_cards + trade >= 0)
-
-	def apply_static(self, term):
-		np.logical_and(self.dynamic_mask.mask_slices[term], self.static_mask.mask_slices[term], out=self.dynamic_mask.mask_slices[term])
-
-	def calculate_longest_road(self):
+	def calculate_longest_road(self, game_index):
 		paths = []
-		for start_vertex in self.edge_proximity_vertices:
+		for start_vertex in self.edge_proximity_vertices[game_index]:
 			paths_from_this_node = []
 			agenda = [(start_vertex, [])]
 			while len(agenda) > 0:
@@ -215,7 +173,7 @@ class Player:
 				able_to_navigate = False
 				for neighbor_vertex in vertex.vertices:
 					vertices_edge = vertex.edge_between_vertex[neighbor_vertex]
-					if vertices_edge not in self.edge_list:
+					if vertices_edge not in self.edge_list[game_index]:
 						continue
 					if vertices_edge not in path_thus_far:
 						agenda.insert(0, (neighbor_vertex, path_thus_far + [vertices_edge]))
@@ -223,7 +181,7 @@ class Player:
 				if not able_to_navigate:
 					paths_from_this_node.append(path_thus_far)
 			paths.extend(paths_from_this_node)
-		self.longest_road = len(max(paths, key=len))
+		self.longest_road[game_index] = len(max(paths, key=len))
 
 	def get_episode_summaries(self):
 
@@ -242,12 +200,12 @@ class Player:
 			"implicit_action_ratio": self.policy_action_count / self.implicit_action_count,
 			"longest_road_per_road": self.longest_road / self.road_count.item(),
 			"win_rate_50": self.win_rate(50),
-			"n_step_update": self.agent.get_n_step_update(),
+			# "n_step_update": self.agent.get_n_step_update(),
 		}
 		if self.game.winning_player == self:
 			scalars["turn_count"] = self.game.state.turn_number.item()
 		histograms = {
-			"action_count": self.action_count,
+			# "action_count": self.action_count,
 		}
 		return {
 			"scalars": scalars,

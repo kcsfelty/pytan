@@ -14,7 +14,7 @@ class Edge:
 		self.edges = []
 		self.adjacent_edge_vertex = {}
 
-	def reset(self):
+	def reset(self, game_index):
 		pass
 
 	def build_adjacent_edge_vertex(self):
