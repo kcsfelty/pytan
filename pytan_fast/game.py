@@ -183,6 +183,8 @@ class PyTanFast(PyEnvironment, ABC):
 					self.num_step[game_index] += 1
 					action = action_list[player_index][game_index]
 					action_handler, action_args = self.handler.action_lookup[action]
+					if action_handler.__name__ is not "handle_no_action":
+						print(game_index, self.player_list[player_index].for_game(game_index), action_handler.__name__, action_args)
 					action_handler(action_args, self.player_list[player_index], game_index)
 
 			if self.winning_player[game_index]:

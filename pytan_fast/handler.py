@@ -210,7 +210,6 @@ class Handler:
 		roll = roll or self.game.dice.roll()
 		self.game.state.current_roll[game_index].fill(0)
 		self.game.state.current_roll[game_index][roll] = 1
-		# self.game.state.current_roll_index.fill(roll)
 		if roll == gs.robber_activation_roll:
 			self.handle_robber_roll(player, game_index)
 			return
@@ -262,7 +261,7 @@ class Handler:
 		player.resource_card_count[game_index].fill(int(np.sum(player.resource_cards[game_index])))
 		assert not np.any(player.resource_cards[game_index] < 0), str(player.resource_cards[game_index]) + str(trade) + player.for_game(game_index)
 		if self.game.state.build_phase[game_index]: return
-		if not player == self.game.current_player[game_index]: return
+		if player is not self.game.current_player[game_index]: return
 		if player.must_discard[game_index] != 0: return
 		self.set_post_roll_mask(player, game_index)
 
@@ -346,11 +345,11 @@ class Handler:
 		self.handle_bank_trade(trade, player, game_index)
 		player.discard_total[game_index] -= trade
 		player.must_discard[game_index] -= 1
-		self.check_discard_trades(player, game_index)
 		someone_must_discard = False
 		for discard_player in self.game.player_list:
 			if discard_player.must_discard[game_index] > 0:
 				someone_must_discard = True
+				self.check_discard_trades(discard_player, game_index)
 			else:
 				discard_player.dynamic_mask.only(df.no_action, game_index)
 		if not someone_must_discard:
@@ -358,8 +357,7 @@ class Handler:
 			self.game.current_player[game_index].must_move_robber[game_index].fill(1)
 
 	def handle_place_city(self, vertex, player, game_index):
-		if not self.check_max_cities(player, game_index):
-			return
+		assert player.city_count[game_index] < gs.max_city_count, str(player.resource_cards[game_index]) + " " + str(player.development_cards[game_index])
 		self.handle_bank_trade(gs.city_cost, player, game_index)
 		self.give_player_city(vertex, player, game_index)
 		self.block_vertex_city(vertex, game_index)
@@ -377,16 +375,13 @@ class Handler:
 		if player.city_count[game_index] == gs.max_city_count:
 			player.dynamic_mask.cannot(df.place_city, game_index)
 			player.static_mask.cannot(df.place_city, game_index)
-			return False
-		return True
 
 	def block_vertex_city(self, vertex, game_index):
 		for block_player in self.game.player_list:
 			block_player.static_mask.place_city[game_index][vertex.index] = False
 
 	def handle_place_road(self, edge, player, game_index):
-		if not self.check_max_roads(player, game_index):
-			return
+		assert player.road_count[game_index] < gs.max_road_count, str(player.resource_cards[game_index]) + " " + str(player.development_cards[game_index])
 		for block_player in self.game.player_list:
 			block_player.static_mask.place_road[game_index][edge.index] = False
 		player.road_count[game_index] += 1
@@ -410,11 +405,13 @@ class Handler:
 			if adjacent_vertex not in player.edge_proximity_vertices[game_index]:
 				player.edge_proximity_vertices[game_index].append(adjacent_vertex)
 		if player.road_count[game_index] == gs.max_road_count:
-			player.static_mask.place_road[game_index].fill(0)
+			player.static_mask.place_road[game_index] = False
+			player.dynamic_mask.place_road[game_index] = False
 		self.maintain_longest_road(player, game_index)
 
 	def check_max_roads(self, player, game_index):
 		if player.road_count[game_index] == gs.max_road_count:
+			print("Tried to place too many roads", player)
 			player.dynamic_mask.cannot(df.place_road, game_index)
 			player.static_mask.cannot(df.place_road, game_index)
 			return False
@@ -431,8 +428,7 @@ class Handler:
 					player.set_longest_road(True, game_index)
 
 	def handle_place_settlement(self, vertex, player, game_index):
-		if self.check_max_settlement(player, game_index):
-			return
+		assert player.settlement_count[game_index] < gs.max_settlement_count, str(player.resource_cards[game_index]) + " " + str(player.development_cards[game_index])
 		if self.game.state.build_phase[game_index]:
 			self.handle_build_phase_settlement(vertex, player, game_index)
 		self.give_player_settlement(vertex, player, game_index)
@@ -444,7 +440,7 @@ class Handler:
 
 	def check_max_settlement(self, player, game_index):
 		if player.settlement_count[game_index] == gs.max_settlement_count:
-			print("tried to build too many settlements")
+			print("Tried to place too many settlements", player)
 			player.dynamic_mask.cannot(df.place_settlement, game_index)
 			return False
 		return True
@@ -493,14 +489,14 @@ class Handler:
 			adjacent_tile.players_to_rob[game_index, player.index, player.index] = False
 
 	def handle_buy_development_card(self, _, player, game_index):
-		if len(self.game.development_card_stack[game_index]) == 0:
-			player.dynamic_mask.cannot(df.buy_development_card, game_index)
+		assert len(self.game.development_card_stack[game_index]) > 0, str(player.resource_cards[game_index]) + " " + str(player.development_cards[game_index])
+		if not self.check_no_development_cards(player, game_index):
 			return
 		self.handle_bank_trade(gs.development_card_cost, player, game_index)
 		card_index = self.game.development_card_stack[game_index].pop(0)
 		self.game.state.bought_development_card_count[game_index] += 1
 		self.game.state.bank_development_card_count[game_index] -= 1
-		if self.game.state.bank_development_card_count[game_index] == 0 or len(self.game.development_card_stack[game_index]) == 0:
+		if len(self.game.development_card_stack[game_index]) == 0:
 			for player in self.game.player_list:
 				player.static_mask.cannot(df.buy_development_card, game_index)
 		if card_index == gs.victory_point_card_index:
@@ -509,6 +505,13 @@ class Handler:
 		else:
 			player.development_card_bought_this_turn[game_index][card_index] += 1
 		self.set_post_roll_mask(player, game_index)
+
+	def check_no_development_cards(self, player, game_index):
+		if len(self.game.development_card_stack[game_index]) == 0:
+			print("Tried to buy too many dev cards", player)
+			player.dynamic_mask.cannot(df.buy_development_card, game_index)
+			return False
+		return True
 
 	def handle_play_dev_card(self, card_index, player, game_index):
 		player.development_cards[game_index][card_index] -= 1
