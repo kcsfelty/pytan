@@ -178,7 +178,6 @@ class PyTanFast(PyEnvironment, ABC):
 				self.reward[:, game_index] = -1
 				self.reward[winning_player_index, game_index] = 1
 
-		self.writer.flush()
 		return self.get_time_step()
 
 	def _reset(self):

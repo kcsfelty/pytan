@@ -1,6 +1,4 @@
 import time
-from concurrent.futures import ThreadPoolExecutor
-
 import numpy as np
 import tensorflow as tf
 import tensorflow_probability as tfp
