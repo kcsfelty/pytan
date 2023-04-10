@@ -135,7 +135,7 @@ class Player:
 			self.game.largest_army_owner[game_index] = self
 			self.change_victory_points(gs.largest_army_victory_points, game_index)
 			self.owns_largest_army.fill(1)
-			np.copyto(self.game.state.largest_army_size, self.development_cards_played[gs.knight_index])
+			np.copyto(self.game.state.largest_army_size[game_index], self.development_cards_played[game_index][gs.knight_index])
 		else:
 			self.game.longest_road_owner[game_index] = None
 			self.change_victory_points(-1 * gs.largest_army_victory_points, game_index)

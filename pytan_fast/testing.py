@@ -206,7 +206,7 @@ def train_eval(
 		total_steps=1e9,
 		train_interval=1,
 		eval_interval=1,
-		log_interval=1000,
+		log_interval=1e5,
 	):
 
 	def maybe_train():

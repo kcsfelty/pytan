@@ -509,7 +509,7 @@ class Handler:
 				player.static_mask.cannot(df.buy_development_card, game_index)
 		if card_index == gs.victory_point_card_index:
 			player.development_cards[game_index][card_index] += 1
-			player.check_victory()
+			player.check_victory(game_index)
 		else:
 			player.development_card_bought_this_turn[game_index][card_index] += 1
 		self.set_post_roll_mask(player, game_index)
@@ -551,7 +551,7 @@ class Handler:
 
 	def handle_play_road_building(self, _, player, game_index):
 		self.handle_play_dev_card(gs.road_building_index, player, game_index)
-		roads_to_build = min(gs.road_building_road_count, player.road_count - gs.max_road_count)
+		roads_to_build = min(gs.road_building_road_count, player.road_count[game_index] - gs.max_road_count)
 		if roads_to_build > 0:
 			self.game.resolve_road_building_count[game_index] = roads_to_build
 			# TODO
