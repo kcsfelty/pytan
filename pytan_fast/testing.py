@@ -10,7 +10,6 @@ from tf_agents.distributions import reparameterized_sampling
 from tf_agents.environments import tf_py_environment
 from tf_agents.networks import categorical_q_network
 from tf_agents.replay_buffers import TFUniformReplayBuffer
-from tf_agents.replay_buffers.episodic_replay_buffer import EpisodicReplayBuffer
 from tf_agents.specs import BoundedTensorSpec
 from tf_agents.trajectories import TimeStep, trajectory, PolicyStep
 from tf_agents.utils import common
@@ -49,7 +48,7 @@ def splitter(obs_tuple):
 	return obs, mask
 
 
-game_count = 1000
+game_count = 2000
 steps = 1000000
 action_count = 379
 observation_count = 1402
@@ -71,7 +70,7 @@ fake_time_step_spec = TimeStep(step_type_spec, reward_type_spec, discount_type_s
 categorical_q_net = categorical_q_network.CategoricalQNetwork(
 	input_tensor_spec=obs_type_spec,
 	action_spec=fake_action_spec,
-	fc_layer_params=(2**6, 2**6, 2**6, 2**6,))
+	fc_layer_params=(2**6, 2**6, 2**6, 2**6, 2**6,))
 
 train_counter = tf.Variable(0, dtype=tf.int32)
 
@@ -99,7 +98,7 @@ total_acc = 0
 replay_buffer = TFUniformReplayBuffer(
 	data_spec=agent.collect_data_spec,
 	batch_size=batch_size,
-	max_length=1000
+	max_length=500
 )
 
 dataset = replay_buffer.as_dataset(
@@ -115,27 +114,14 @@ last_log = time.time()
 
 
 for step in range(steps):
-	mark = time.perf_counter()
 	action = get_player_actions(time_step)
-	next_steps_acc += time.perf_counter() - mark
-
-	mark = time.perf_counter()
 	next_time_step = tf_game.step(action)
-	time_step_acc += time.perf_counter() - mark
-
-	mark = time.perf_counter()
 	action_flat = tf.reshape(action, (1, player_count * game_count))[0]
-	traj = trajectory.from_transition(
+	replay_buffer.add_batch(trajectory.from_transition(
 		time_step,
 		PolicyStep(action_flat),
-		next_time_step
-	)
+		next_time_step))
 	time_step = next_time_step
-	trajectory_acc += time.perf_counter() - mark
-
-	mark = time.perf_counter()
-	episode_ids = replay_buffer.add_batch(traj)
-	add_batch_acc += time.perf_counter() - mark
 
 	if replay_buffer.num_frames() > batch_size * n_step_update:
 		exp, _ = next(iterator)
@@ -152,11 +138,6 @@ for step in range(steps):
 		print(current_step, "of", steps * game_count, str(int(step / steps * 100)) + "%", "rate", delta, "train:", train_counter.numpy().item())
 		next_log = time.time() + log_interval
 		total_acc = time_step_acc + next_steps_acc + add_batch_acc
-		# print("time_step_acc", str(int(time_step_acc / total_acc * 100)) + "%")
-		# print("next_steps_acc", str(int(next_steps_acc / total_acc * 100)) + "%")
-		# print("trajectory_acc", str(int(trajectory_acc / total_acc * 100)) + "%")
-		# print("add_batch_acc", str(int(add_batch_acc / total_acc * 100)) + "%")
-		# print("train_counter", train_counter)
 
 end = time.perf_counter()
 delta = end - start

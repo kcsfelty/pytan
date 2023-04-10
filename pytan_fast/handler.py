@@ -394,7 +394,7 @@ class Handler:
 
 	def handle_place_city(self, vertex, player, game_index):
 		if player.city_count[game_index] == gs.max_city_count:
-			print("Tried to build too many cities")
+			# print("Tried to build too many cities")
 			player.dynamic_mask.cannot(df.place_city, game_index)
 			player.static_mask.cannot(df.place_city, game_index)
 			return
