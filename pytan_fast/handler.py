@@ -199,7 +199,6 @@ class Handler:
 			self.game.state.current_roll[game_index].fill(0)
 			next_player.dynamic_mask.only(df.roll_dice, game_index)
 			self.check_player_play_development_card(next_player, game_index)
-			next_player.dynamic_mask.cannot(df.end_turn, game_index)
 
 	def handle_roll_dice(self, roll, player, game_index):
 		assert player is self.game.current_player[game_index], self.game.get_crash_log(player, game_index) + self.game.current_player[game_index].for_game(game_index)
@@ -233,8 +232,8 @@ class Handler:
 			self.handle_bank_trade(trade[disburse_player.index], disburse_player, game_index)
 
 	def handle_robber_roll(self, player, game_index):
-		# assert dice rolled
-		# assert not in build phase
+		assert np.any(self.game.state.current_roll[game_index] == 1), self.game.get_crash_log(player, game_index)
+		assert not self.game.state.build_phase[game_index], self.game.get_crash_log(player, game_index)
 		some_player_discards = False
 		for robbed_player in self.game.player_list:
 			if robbed_player.resource_card_count[game_index] > gs.rob_player_above_card_count:
@@ -246,6 +245,7 @@ class Handler:
 				robbed_player.dynamic_mask.only(df.no_action, game_index)
 		if not some_player_discards:
 			player.dynamic_mask.only(df.move_robber, game_index)
+			player.dynamic_mask.mask_slices[df.move_robber][game_index, self.game.board.robbed_tile[game_index].index] = False
 			player.must_move_robber[game_index].fill(1)
 
 	def handle_player_trade(self, player_from, player_to, trade, game_index):
@@ -294,8 +294,9 @@ class Handler:
 
 	def handle_accept_player_trade(self, _, player, game_index):
 		assert not player.current_player[game_index], self.game.get_crash_log(player, game_index)
-		assert player.can_afford(-1 * self.game.state.current_player_trade[game_index]), self.game.get_crash_log(player, game_index)
-		assert player.offering_trade[game_index], self.game.get_crash_log(player, game_index)
+		assert player.can_afford(-1 * self.game.state.current_player_trade[game_index], game_index), self.game.get_crash_log(player, game_index)
+		assert player.offering_trade[game_index] is not None, self.game.get_crash_log(player, game_index)
+		assert player.offering_trade[game_index] is not player, self.game.get_crash_log(player, game_index)
 		player.accepted_trade[game_index].fill(True)
 		player.dynamic_mask.only(df.no_action, game_index)
 		self.game.trading_player[game_index].static_mask.confirm_player_trade[game_index][player.index] = True
@@ -303,8 +304,9 @@ class Handler:
 
 	def handle_decline_player_trade(self, _, player, game_index):
 		assert not player.current_player[game_index], self.game.get_crash_log(player, game_index)
-		assert player.offering_trade[game_index], self.game.get_crash_log(player, game_index)
-		assert np.sum(self.game.state.current_player_trade[game_index]) > 0, self.game.get_crash_log(player, game_index)
+		assert player.offering_trade[game_index] is not None, self.game.get_crash_log(player, game_index)
+		assert player.offering_trade[game_index] is not player, self.game.get_crash_log(player, game_index)
+		assert np.sum(self.game.state.current_player_trade[game_index] > 0) > 0, self.game.get_crash_log(player, game_index)
 		player.declined_trade[game_index].fill(1)
 		player.dynamic_mask.only(df.no_action, game_index)
 		self.check_trade_responses(game_index)
@@ -326,7 +328,7 @@ class Handler:
 		assert np.any(self.game.state.current_roll[game_index] == 1), self.game.get_crash_log(player, game_index)
 		player.static_mask.confirm_player_trade[game_index].fill(0)
 		self.game.trading_player[game_index] = None
-		player.offering_trade[game_index].fill(0)
+		player.offering_trade[game_index].fill(False)
 		for opponent in player.other_players:
 			opponent.accepted_trade[game_index].fill(0)
 			opponent.declined_trade[game_index].fill(0)
@@ -348,6 +350,7 @@ class Handler:
 		assert player.current_player[game_index], self.game.get_crash_log(player, game_index)
 		assert player.must_move_robber[game_index], self.game.get_crash_log(player, game_index)
 		assert self.game.board.robbed_tile[game_index] is not tile, self.game.get_crash_log(player, game_index)
+		assert player.must_move_robber[game_index] is not tile, self.game.get_crash_log(player, game_index)
 		player.must_move_robber[game_index].fill(0)
 		self.game.board.robbed_tile[game_index].has_robber.fill(False)
 		self.game.board.robbed_tile[game_index] = tile
@@ -373,8 +376,8 @@ class Handler:
 
 	def handle_rob_player(self, rob_player, player, game_index):
 		has_near_vertex = False
-		for adjacent_vertex in self.game.board.robbed_tile.vertices:
-			if adjacent_vertex.owned_by[game_index] is player:
+		for adjacent_vertex in self.game.board.robbed_tile[game_index].vertices:
+			if adjacent_vertex.owned_by[game_index] is rob_player:
 				has_near_vertex = True
 		assert has_near_vertex, self.game.get_crash_log(player, game_index)
 		assert player.current_player[game_index], self.game.get_crash_log(player, game_index)
@@ -405,11 +408,13 @@ class Handler:
 				discard_player.dynamic_mask.only(df.no_action, game_index)
 		if not someone_must_discard:
 			self.game.current_player[game_index].dynamic_mask.only(df.move_robber, game_index)
+			self.game.current_player[game_index].dynamic_mask.mask_slices[df.move_robber][game_index, self.game.board.robbed_tile[game_index].index] = False
 			self.game.current_player[game_index].must_move_robber[game_index].fill(1)
 
 	def handle_place_city(self, vertex, player, game_index):
 		assert player.city_count[game_index] < gs.max_city_count, self.game.get_crash_log(player, game_index)
 		assert player.current_player[game_index], self.game.get_crash_log(player, game_index)
+		assert vertex.owned_by[game_index] is not None, self.game.get_crash_log(player, game_index)
 		assert vertex.owned_by[game_index] is player, self.game.get_crash_log(player, game_index)
 		assert not self.game.state.build_phase[game_index], self.game.get_crash_log(player, game_index)
 		assert player.can_afford(gs.city_cost, game_index), self.game.get_crash_log(player, game_index)
@@ -418,7 +423,6 @@ class Handler:
 		assert not vertex.city[game_index], self.game.get_crash_log(player, game_index)
 		assert not vertex.open[game_index], self.game.get_crash_log(player, game_index)
 		for adjacent_vertex in vertex.vertices:
-			assert adjacent_vertex.open[game_index], self.game.get_crash_log(player, game_index)
 			assert adjacent_vertex.owned_by[game_index] is None, self.game.get_crash_log(player, game_index)
 			assert not adjacent_vertex.city[game_index], self.game.get_crash_log(player, game_index)
 			assert not adjacent_vertex.settlement[game_index], self.game.get_crash_log(player, game_index)
@@ -454,8 +458,7 @@ class Handler:
 					has_near_road = True
 			assert has_near_road, self.game.get_crash_log(player, game_index)
 			assert np.any(self.game.state.current_roll[game_index] == 1), self.game.get_crash_log(player, game_index)
-			assert player.can_afford(gs.settlement_cost, game_index), self.game.get_crash_log(player, game_index)
-		assert np.any(self.game.state.current_roll[game_index] == 1), self.game.get_crash_log(player, game_index)
+			assert player.can_afford(gs.road_cost, game_index), self.game.get_crash_log(player, game_index)
 		for block_player in self.game.player_list:
 			block_player.static_mask.place_road[game_index][edge.index] = False
 			block_player.dynamic_mask.place_road[game_index][edge.index] = False
@@ -497,19 +500,18 @@ class Handler:
 	def handle_place_settlement(self, vertex, player, game_index):
 		assert player.settlement_count[game_index] < gs.max_settlement_count, self.game.get_crash_log(player, game_index)
 		assert player.current_player[game_index], self.game.get_crash_log(player, game_index)
-		assert np.any(self.game.state.current_roll[game_index] == 1), self.game.get_crash_log(player, game_index)
 		if not self.game.state.build_phase[game_index]:
 			has_near_road = False
 			for adjacent_road in vertex.edges:
 				if adjacent_road in player.edge_list[game_index]:
 					has_near_road = True
+			assert np.any(self.game.state.current_roll[game_index] == 1), self.game.get_crash_log(player, game_index)
 			assert has_near_road, self.game.get_crash_log(player, game_index)
 			assert player.can_afford(gs.settlement_cost, game_index), self.game.get_crash_log(player, game_index)
 		assert vertex.open[game_index], self.game.get_crash_log(player, game_index)
 		assert vertex.owned_by[game_index] is None, self.game.get_crash_log(player, game_index)
 		assert not vertex.city[game_index], self.game.get_crash_log(player, game_index)
 		for adjacent_vertex in vertex.vertices:
-			assert adjacent_vertex.open[game_index], self.game.get_crash_log(player, game_index)
 			assert adjacent_vertex.owned_by[game_index] is None, self.game.get_crash_log(player, game_index)
 			assert not adjacent_vertex.city[game_index], self.game.get_crash_log(player, game_index)
 			assert not adjacent_vertex.settlement[game_index], self.game.get_crash_log(player, game_index)
@@ -558,7 +560,7 @@ class Handler:
 			for block_player in self.game.player_list:
 				block_player.static_mask.place_settlement[game_index][vertex.index] = False
 				block_player.static_mask.place_city[game_index][vertex.index] = False
-		player.static_mask.place_city[game_index][vertex.index] = True
+		player.static_mask.place_city[game_index][vertex.index].fill(True)
 
 	def allow_player_tile_rob(self, tile_list, player, game_index):
 		for adjacent_tile in tile_list:
@@ -606,6 +608,7 @@ class Handler:
 	def handle_play_knight(self, _, player, game_index):
 		self.handle_play_dev_card(gs.knight_index, player, game_index)
 		player.dynamic_mask.only(df.move_robber, game_index)
+		player.dynamic_mask.mask_slices[df.move_robber][game_index, self.game.board.robbed_tile[game_index].index] = False
 		player.must_move_robber[game_index].fill(1)
 		self.maintain_largest_army(player, game_index)
 
