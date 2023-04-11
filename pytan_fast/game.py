@@ -1,3 +1,4 @@
+import concurrent.futures
 import random
 from abc import ABC
 from itertools import cycle
@@ -192,6 +193,16 @@ class PyTanFast(PyEnvironment, ABC):
 			self.crash_log[game_index].append(player.for_game(game_index))
 		return "\n".join(self.crash_log[game_index])
 
+	def add_action_to_crash_loc(self, game_index, player_index, action_handler, action_args):
+		if action_handler.__name__ is not "handle_no_action":
+			crash_str = ""
+			crash_str += str(game_index) + " "
+			crash_str += self.player_list[player_index].for_game(game_index) + " "
+			crash_str += str(self.player_list[player_index].resource_cards[game_index]) + " "
+			crash_str += action_handler.__name__ + " "
+			crash_str += str(action_args) if action_args is not None else "" + " "
+			self.crash_log[game_index].append(crash_str)
+
 	def _step(self, action_list: types.NestedArray) -> tuple[TimeStep, ...]:
 		self.step_type = np.ones((player_count, self.game_count), dtype=np.int32)
 		self.reward = np.zeros((player_count, self.game_count), dtype=np.float32)
@@ -200,33 +211,25 @@ class PyTanFast(PyEnvironment, ABC):
 			if self.winning_player[game_index]:
 				self.write_episode_summary(game_index)
 				self.reset_game(game_index)
-				self.step_type[:, game_index] = 0
-			if self.state.turn_number[game_index].item() >= 1000:
+				self.step_type[:, game_index] = StepType.FIRST
+			elif self.state.turn_number[game_index].item() >= 1000:
 				self.reset_game(game_index)
-				self.step_type[:, game_index] = 0
+				self.step_type[:, game_index] = StepType.FIRST
 				self.reward[:, game_index] = -1
-
 			else:
-				#action_queue = []
-				for player_index in range(player_count):
-					self.global_step.assign_add(1)
-					self.num_step[game_index] += 1
-					action = action_list[player_index][game_index]
-					action_handler, action_args = self.handler.action_lookup[action]
-					if action_handler.__name__ is not "handle_no_action":
-						crash_str = ""
-						crash_str += str(game_index) + " "
-						crash_str += self.player_list[player_index].for_game(game_index) + " "
-						crash_str += str(self.player_list[player_index].resource_cards[game_index]) + " "
-						crash_str += action_handler.__name__ + " "
-						crash_str += str(action_args) if action_args is not None else "" + " "
-						self.crash_log[game_index].append(crash_str)
-					#action_queue.append((action_handler, (action_args, self.player_list[player_index], game_index)))
-					action_handler(action_args, self.player_list[player_index], game_index)
-				for player_index in range(player_count):
-					assert not np.any(self.player_list[player_index].resource_cards[game_index] < 0), self.get_crash_log(self.player_list[player_index], game_index)
-				# for handler, args in action_queue:
-				# 	handler(*args)
+				with concurrent.futures.ThreadPoolExecutor(max_workers=32) as executor:
+					futures = []
+					for player_index in range(player_count):
+						self.global_step.assign_add(1)
+						self.num_step[game_index] += 1
+						action = action_list[player_index][game_index]
+						action_handler, action_args = self.handler.action_lookup[action]
+						self.add_action_to_crash_loc(game_index, player_index, action_handler, action_args)
+						args = action_args, self.player_list[player_index], game_index
+						futures.append(executor.submit(action_handler, *args))
+						# action_handler(*args)
+					for future in concurrent.futures.as_completed(futures):
+						future.result()
 			if self.winning_player[game_index]:
 				winning_player_index = self.winning_player[game_index].index
 				self.step_type[:, game_index] = StepType.LAST
@@ -281,10 +284,10 @@ class PyTanFast(PyEnvironment, ABC):
 		first_player = self.player_list[first_player_index]
 		first_player.dynamic_mask.only(df.place_settlement, game_index)
 		first_player.current_player[game_index].fill(True)
-		#np.logical_and(
-		#	first_player.dynamic_mask.place_settlement[game_index],
-		#	self.state.vertex_open[game_index],
-		#	out=first_player.dynamic_mask.place_settlement[game_index])
+		np.logical_and(
+			first_player.dynamic_mask.place_settlement[game_index],
+			self.state.vertex_open[game_index],
+			out=first_player.dynamic_mask.place_settlement[game_index])
 
 	def get_observation(self):
 		obs_list = [self.state.for_player(player_index) for player_index in range(player_count)]

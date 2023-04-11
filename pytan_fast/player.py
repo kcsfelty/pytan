@@ -180,8 +180,7 @@ class Player:
 			paths.extend(paths_from_this_node)
 		self.longest_road[game_index] = len(max(paths, key=len))
 
-	def get_episode_summaries(self):
-
+	def get_episode_summaries(self, game_index):
 		scalars = {
 			"episode_rewards": self.episode_rewards,
 			"victory_points": self.victory_points.item(),

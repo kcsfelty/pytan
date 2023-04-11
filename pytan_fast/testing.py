@@ -35,43 +35,7 @@ class MetaAgent:
 		time_step_list = [TimeStep(*time_step_list[i:i+4]) for i in range(0, len(time_step_list), 4)]
 		for agent, time_step in zip(self.agent_list, time_step_list):
 			action_list.append(agent.act(time_step))
-		# actions = tf.map_fn(
-		# 	lambda a, ts: a.act(ts),
-		# 	(self.agent_list, time_step),
-		# 	fn_output_signature=tf.TensorSpec((self.agent_count, self.game_count,), dtype=tf.float32))
-		# actions = tf.cast(actions, dtype=tf.int32)
 		return action_list
-
-	# @tf.function
-	# def act_agent(self, agent, time_step):
-	# 	return agent.act(time_step)
-	#
-	# @tf.function
-	# def split_time_step(self, time_step):
-	# 	obs, mask = time_step.observation
-	# 	split_observation = tf.split(obs, self.agent_count)
-	# 	split_mask = tf.split(mask, self.agent_count)
-	# 	split_step_type = tf.split(time_step.step_type, self.agent_count)
-	# 	split_discount = tf.split(time_step.discount, self.agent_count)
-	# 	split_reward = tf.split(time_step.reward, self.agent_count)
-	# 	return tf.map_fn(
-	# 		self.merge_time_step,
-	# 		split_observation,
-	# 		split_mask,
-	# 		split_step_type,
-	# 		split_discount,
-	# 		split_reward,
-	# 		fn_output_signature=tf.TensorSpec((self.game_count,), dtype=tf.float32))
-	#
-	# @tf.function
-	# def merge_time_step(self, split_observation, split_mask, split_step_type, split_discount, split_reward):
-	# 	return TimeStep(
-	# 		step_type=split_step_type,
-	# 		reward=split_reward,
-	# 		discount=split_discount,
-	# 		observation=(split_observation, split_mask)
-	# 	)
-
 
 class Agent:
 	def __init__(self,
@@ -202,11 +166,11 @@ fake_time_step_spec = TimeStep(
 
 
 def train_eval(
-		game_count=1000,
+		game_count=10000,
 		total_steps=1e9,
 		train_interval=1,
 		eval_interval=1,
-		log_interval=1e5,
+		log_interval=1e4,
 	):
 
 	def maybe_train():
@@ -224,6 +188,8 @@ def train_eval(
 			log_str += "[global: {}]".format(str(step).rjust(10))
 			log_str += "\t"
 			log_str += "[pct: {}%]".format(str(int(step / total_steps * 100)))
+			log_str += "\t"
+			log_str += "[rate: {} step/sec]".format(str(int(step / (time.perf_counter() - start))))
 			print(log_str)
 
 	def run():
@@ -236,10 +202,11 @@ def train_eval(
 			maybe_log()
 
 	global_step = tf.Variable(0, dtype=tf.int32)
-	game = PyTanFast(game_count=game_count, global_step=global_step)
+	game = PyTanFast(game_count, global_step)
 	env = tf_py_environment.TFPyEnvironment(game)
 	agent_list = [Agent(game_count=game_count) for _ in range(player_count)]
 	meta = MetaAgent(agent_list, game_count)
+	start = time.perf_counter()
 	run()
 
 

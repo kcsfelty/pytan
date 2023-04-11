@@ -246,7 +246,6 @@ class Handler:
 		if not some_player_discards:
 			player.dynamic_mask.only(df.move_robber, game_index)
 			player.dynamic_mask.move_robber[game_index, self.game.board.robbed_tile[game_index].index] = False
-			# player.must_move_robber[game_index].fill(1)
 			player.must_move_robber[game_index] = True
 
 	def handle_player_trade(self, player_from, player_to, trade, game_index):
@@ -349,9 +348,8 @@ class Handler:
 
 	def handle_move_robber(self, tile, player, game_index):
 		assert player.current_player[game_index], self.game.get_crash_log(player, game_index)
-		assert player.must_move_robber[game_index], self.game.get_crash_log(player, game_index)
 		assert self.game.board.robbed_tile[game_index] is not tile, self.game.get_crash_log(player, game_index)
-		assert player.must_move_robber[game_index] is not tile, self.game.get_crash_log(player, game_index)
+		assert player.must_move_robber[game_index], self.game.get_crash_log(player, game_index)
 		# player.must_move_robber[game_index].fill(0)
 		player.must_move_robber[game_index] = False
 		self.game.board.robbed_tile[game_index].has_robber.fill(False)
