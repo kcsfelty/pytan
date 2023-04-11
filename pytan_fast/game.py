@@ -164,14 +164,15 @@ class PyTanFast(PyEnvironment, ABC):
 		summary += "[turns:{}] ".format(str(turn).rjust(5))
 		summary += "[steps:{}] ".format(str(step).rjust(6))
 		summary += "[global:{}]   ".format(str(global_step).rjust(10))
-		summary += str(self.winning_player[game_index].for_game(game_index))
+		if self.winning_player[game_index]:
+			summary += str(self.winning_player[game_index].for_game(game_index))
 		print(summary)
 
 		with self.writer.as_default(step=global_step):
 			tf.summary.scalar(name="turn_count", data=turn)
 
 		if turn < self.min_turns:
-			if turn < 30:
+			if turn < 20:
 				print(self.get_crash_log(None, game_index, add_state=False))
 
 	def add_state_to_crash_log(self, player, game_index):
@@ -200,8 +201,13 @@ class PyTanFast(PyEnvironment, ABC):
 				self.write_episode_summary(game_index)
 				self.reset_game(game_index)
 				self.step_type[:, game_index] = 0
+			if self.state.turn_number[game_index].item() >= 1000:
+				self.reset_game(game_index)
+				self.step_type[:, game_index] = 0
+				self.reward[:, game_index] = -1
+
 			else:
-				action_queue = []
+				#action_queue = []
 				for player_index in range(player_count):
 					self.global_step.assign_add(1)
 					self.num_step[game_index] += 1
@@ -215,8 +221,7 @@ class PyTanFast(PyEnvironment, ABC):
 						crash_str += action_handler.__name__ + " "
 						crash_str += str(action_args) if action_args is not None else "" + " "
 						self.crash_log[game_index].append(crash_str)
-						print(crash_str)
-					action_queue.append((action_handler, (action_args, self.player_list[player_index], game_index)))
+					#action_queue.append((action_handler, (action_args, self.player_list[player_index], game_index)))
 					action_handler(action_args, self.player_list[player_index], game_index)
 				for player_index in range(player_count):
 					assert not np.any(self.player_list[player_index].resource_cards[game_index] < 0), self.get_crash_log(self.player_list[player_index], game_index)
@@ -276,10 +281,10 @@ class PyTanFast(PyEnvironment, ABC):
 		first_player = self.player_list[first_player_index]
 		first_player.dynamic_mask.only(df.place_settlement, game_index)
 		first_player.current_player[game_index].fill(True)
-		np.logical_and(
-			first_player.dynamic_mask.place_settlement[game_index],
-			self.state.vertex_open[game_index],
-			out=first_player.dynamic_mask.place_settlement[game_index])
+		#np.logical_and(
+		#	first_player.dynamic_mask.place_settlement[game_index],
+		#	self.state.vertex_open[game_index],
+		#	out=first_player.dynamic_mask.place_settlement[game_index])
 
 	def get_observation(self):
 		obs_list = [self.state.for_player(player_index) for player_index in range(player_count)]
