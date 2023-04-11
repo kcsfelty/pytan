@@ -166,11 +166,11 @@ fake_time_step_spec = TimeStep(
 
 
 def train_eval(
-		game_count=10000,
+		game_count=1000,
 		total_steps=1e9,
 		train_interval=1,
 		eval_interval=1,
-		log_interval=1e4,
+		log_interval=1e5,
 	):
 
 	def maybe_train():
