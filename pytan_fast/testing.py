@@ -77,9 +77,9 @@ class Agent:
 	def __init__(self,
 				 q_min=-1,
 				 q_max=1,
-				 n_step_update=3,
+				 n_step_update=1,
 				 replay_buffer_size=1000,
-				 learn_rate=0.0001,
+				 learn_rate=0.00001,
 				 fc_layer_params=(2 ** 8, 2 ** 8, 2 ** 7, 2 ** 7, 2 ** 6, 2 ** 6,),
 				 game_count=1,
 	):
@@ -202,7 +202,7 @@ fake_time_step_spec = TimeStep(
 
 
 def train_eval(
-		game_count=5,
+		game_count=500,
 		total_steps=1e9,
 		train_interval=1,
 		eval_interval=1,

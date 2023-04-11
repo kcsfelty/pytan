@@ -32,7 +32,8 @@ class Player:
 		# )
 
 	def for_game(self, game_index):
-		return "Player{} S={} C={} R={} VC={} LA={}{} LR={}{}".format(
+		return "{}Player{} S={} C={} R={} VC={} LA={}{} LR={}{}".format(
+			"@" if self.current_player[game_index] else " ",
 			self.index,
 			str(int(self.settlement_count[game_index])).ljust(3),
 			str(int(self.city_count[game_index])).ljust(3),

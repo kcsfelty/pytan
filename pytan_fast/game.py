@@ -69,6 +69,8 @@ class PyTanFast(PyEnvironment, ABC):
 		self.dice = Dice()
 
 		# Driver helpers
+		self.min_turns = np.inf
+		self.crash_log = [[]] * game_count
 		self.num_step = [0] * game_count
 		self.player_cycle = [None] * game_count
 		self.player_order_build_phase = [[0, 1, 2] for _ in range(game_count)]
@@ -168,6 +170,27 @@ class PyTanFast(PyEnvironment, ABC):
 		with self.writer.as_default(step=global_step):
 			tf.summary.scalar(name="turn_count", data=turn)
 
+		if turn < self.min_turns:
+			if turn < 30:
+				print(self.get_crash_log(None, game_index, add_state=False))
+
+	def add_state_to_crash_log(self, player, game_index):
+		for term in self.state.game_state_slices:
+			term_str = str(term) + ", " + str(self.state.game_state_slices[term][game_index])
+			self.crash_log[game_index].append(term_str)
+		for term in player.public_state:
+			term_str = str(term) + ", " + str(player.public_state[term][game_index])
+			self.crash_log[game_index].append(term_str)
+		for term in player.private_state:
+			term_str = str(term) + ", " + str(player.private_state[term][game_index])
+			self.crash_log[game_index].append(term_str)
+
+	def get_crash_log(self, player, game_index, add_state=True):
+		if add_state:
+			self.add_state_to_crash_log(player or None, game_index)
+			self.crash_log[game_index].append(player.for_game(game_index))
+		return "\n".join(self.crash_log[game_index])
+
 	def _step(self, action_list: types.NestedArray) -> tuple[TimeStep, ...]:
 		self.step_type = np.ones((player_count, self.game_count), dtype=np.int32)
 		self.reward = np.zeros((player_count, self.game_count), dtype=np.float32)
@@ -178,15 +201,27 @@ class PyTanFast(PyEnvironment, ABC):
 				self.reset_game(game_index)
 				self.step_type[:, game_index] = 0
 			else:
+				action_queue = []
 				for player_index in range(player_count):
 					self.global_step.assign_add(1)
 					self.num_step[game_index] += 1
 					action = action_list[player_index][game_index]
 					action_handler, action_args = self.handler.action_lookup[action]
 					if action_handler.__name__ is not "handle_no_action":
-						print(game_index, self.player_list[player_index].for_game(game_index), action_handler.__name__, action_args)
+						crash_str = ""
+						crash_str += str(game_index) + " "
+						crash_str += self.player_list[player_index].for_game(game_index) + " "
+						crash_str += str(self.player_list[player_index].resource_cards[game_index]) + " "
+						crash_str += action_handler.__name__ + " "
+						crash_str += str(action_args) if action_args is not None else "" + " "
+						self.crash_log[game_index].append(crash_str)
+						print(crash_str)
+					action_queue.append((action_handler, (action_args, self.player_list[player_index], game_index)))
 					action_handler(action_args, self.player_list[player_index], game_index)
-
+				for player_index in range(player_count):
+					assert not np.any(self.player_list[player_index].resource_cards[game_index] < 0), self.get_crash_log(self.player_list[player_index], game_index)
+				# for handler, args in action_queue:
+				# 	handler(*args)
 			if self.winning_player[game_index]:
 				winning_player_index = self.winning_player[game_index].index
 				self.step_type[:, game_index] = StepType.LAST
@@ -221,6 +256,7 @@ class PyTanFast(PyEnvironment, ABC):
 		self.largest_army_owner[game_index] = None
 		self.player_trades_this_turn[game_index] = 0
 		self.resolve_road_building_count[game_index] = 0
+		self.crash_log[game_index] = [""]
 
 		for player in self.player_list: player.reset(game_index)
 		for tile in self.board.tiles: tile.reset(game_index)
@@ -239,6 +275,7 @@ class PyTanFast(PyEnvironment, ABC):
 		first_player_index = self.player_order_build_phase[game_index].pop(0)
 		first_player = self.player_list[first_player_index]
 		first_player.dynamic_mask.only(df.place_settlement, game_index)
+		first_player.current_player[game_index].fill(True)
 		np.logical_and(
 			first_player.dynamic_mask.place_settlement[game_index],
 			self.state.vertex_open[game_index],
