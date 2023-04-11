@@ -75,7 +75,7 @@ class Agent:
 		self.dataset = self.replay_buffer.as_dataset(
 			num_parallel_calls=3,
 			sample_batch_size=game_count,
-			num_steps=n_step_update + 1,
+			num_steps=n_step_update + 1 if n_step_update else 1,
 		).prefetch(3)
 
 		self.iterator = iter(self.dataset)
@@ -166,7 +166,7 @@ fake_time_step_spec = TimeStep(
 
 
 def train_eval(
-		game_count=1000,
+		game_count=1500,
 		total_steps=1e9,
 		train_interval=1,
 		eval_interval=1,
