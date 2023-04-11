@@ -25,3 +25,31 @@ game_state_degrees = {
 	current_roll: cs.tile_roll_number_type_count,
 	vertex_has_port: cs.vertex_count * cs.port_type_count,
 }
+
+
+game_state_degrees_condensed = {
+	bank_development_card_count: 1,
+	longest_road_length: 1,
+	largest_army_size: 1,
+	turn_number: 1,
+	build_phase: 1,
+	build_phase_reversed: 1,
+	build_phase_placed_settlement: 1,
+	build_phase_placed_road: 1,
+	bought_development_card_count: 1,
+	played_development_card_count: 1,
+	bank_resources: cs.resource_type_count,
+	current_player_trade: cs.resource_type_count,
+
+	# Compact state
+	current_player_index: 1,
+	must_move_robber_index: 1,
+	owns_largest_army_index: 1,
+	owns_longest_road_index: 1,
+	offering_trade_index: 1,
+	current_roll_index: 1,
+	tile_has_robber_index: 1,
+	tile_resource_index: cs.tile_count,
+	tile_roll_number_index: cs.tile_count,
+	port_resource_index: cs.port_count,
+}

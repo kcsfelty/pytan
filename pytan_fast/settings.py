@@ -103,6 +103,7 @@ port_vertex_groups = [
 	[(3, 1), (4, 0)],
 	[(1, 3), (2, 2)],
 ]
+port_count = len(port_vertex_groups)
 port_list = [0, 1, 2, 3, 4, 5]
 port_type_count_per_type = [1, 1, 1, 1, 1, 4]
 general_port_index = 5

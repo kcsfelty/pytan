@@ -1,34 +1,86 @@
 import numpy as np
 import pytan_fast.settings as gs
 import pytan_fast.definitions as df
-from pytan_fast.states.game_state import game_state_degrees
+from pytan_fast.states.game_state import game_state_degrees, game_state_degrees_condensed
 from pytan_fast.states.private_state import private_state_degrees
-from pytan_fast.states.public_state import public_state_degrees
+from pytan_fast.states.public_state import public_state_degrees, public_state_degrees_condensed
 
 
 class State:
-	def __init__(self):
-		self.game_state_len = sum([game_state_degrees[term] for term in game_state_degrees])
+	def __init__(self, game_count=1, player_count=3, condensed_state=False):
+		self.game_count = game_count
+		self.condensed_state = condensed_state
+
+		if self.condensed_state:
+			standard_game_state_degrees = game_state_degrees_condensed
+			extended_game_state_degrees = game_state_degrees
+			standard_public_state_degrees = public_state_degrees_condensed
+			extended_public_state_degrees = public_state_degrees
+		else:
+			standard_game_state_degrees = game_state_degrees
+			extended_game_state_degrees = game_state_degrees_condensed
+			standard_public_state_degrees = public_state_degrees
+			extended_public_state_degrees = public_state_degrees_condensed
+
+		# combined_game_state_degrees = standard_game_state_degrees | extended_game_state_degrees
+		# extra_game_state_degrees = extended_game_state_degrees.keys() - standard_game_state_degrees.keys()
+		combined_public_state_degrees = standard_public_state_degrees | extended_public_state_degrees
+		extra_public_state_degrees = extended_public_state_degrees.keys() - standard_public_state_degrees.keys()
+
+		# print(standard_game_state_degrees)
+		# print(standard_public_state_degrees)
+		self.observation_terms = []
+		for term in standard_game_state_degrees:
+			if standard_game_state_degrees[term] > 1:
+				self.observation_terms.extend([term + "_" + str(i) for i in range(standard_game_state_degrees[term])])
+			else:
+				self.observation_terms.append(term)
+		for term in private_state_degrees:
+			if private_state_degrees[term] > 1:
+				self.observation_terms.extend([term + "_" + str(i) for i in range(private_state_degrees[term])])
+			else:
+				self.observation_terms.append(term)
+		for term in standard_public_state_degrees:
+			if standard_public_state_degrees[term] > 1:
+				self.observation_terms.extend([term + "_" + str(i) for i in range(standard_public_state_degrees[term])])
+			else:
+				self.observation_terms.append(term)
+		# for term in self.observation_terms:
+			# print(term)
+		# self.extra_game_state = {}
+		# for game_state_term in extra_game_state_degrees:
+		# 	self.extra_game_state[game_state_term] = np.zeros(combined_game_state_degrees[game_state_term])
+			# print(game_state_term)
+		# print()
+		self.extra_public_state = {}
+		for public_state_term in extra_public_state_degrees:
+			self.extra_public_state[public_state_term] = np.zeros((gs.player_count, combined_public_state_degrees[public_state_term]), dtype=np.int32)
+			# print(public_state_term)
+
+		self.game_state_len = sum([standard_game_state_degrees[term] for term in standard_game_state_degrees])
 		self.private_state_len = sum([private_state_degrees[term] for term in private_state_degrees])
-		self.public_state_len = sum([public_state_degrees[term] for term in public_state_degrees])
+		self.public_state_len = sum([standard_public_state_degrees[term] for term in standard_public_state_degrees])
 		total_len = self.game_state_len + gs.player_count * (self.private_state_len + self.public_state_len)
-		self.state = np.zeros(total_len, dtype=np.int32)
+		self.state = np.zeros((game_count, total_len), dtype=np.int32)
 		self.state_slices = {}
-		self.state_slices[df.game_state] = self.state[:self.game_state_len]
-		self.state_slices[df.private_state] = self.state[self.game_state_len:self.game_state_len + self.private_state_len * gs.player_count]
-		self.state_slices[df.public_state] = self.state[self.game_state_len + self.private_state_len * gs.player_count:]
-		self.state_slices[df.private_state].shape = (gs.player_count, self.private_state_len)
-		self.state_slices[df.public_state].shape = (gs.player_count, self.public_state_len)
+		self.state_slices[df.game_state] = self.state[:, :self.game_state_len]
+		self.state_slices[df.private_state] = self.state[:, self.game_state_len:self.game_state_len + self.private_state_len * gs.player_count]
+		self.state_slices[df.public_state] = self.state[:, self.game_state_len + self.private_state_len * gs.player_count:]
+		self.state_slices[df.game_state].shape = (game_count, self.game_state_len)
+		self.state_slices[df.private_state].shape = (game_count, gs.player_count, self.private_state_len)
+		self.state_slices[df.public_state].shape = (game_count, gs.player_count, self.public_state_len)
 		self.game_state_slices = {}
 		current_index = 0
-		for term in game_state_degrees:
-			next_index = current_index + game_state_degrees[term]
-			self.game_state_slices[term] = self.state_slices[df.game_state][current_index:next_index]
+		for term in standard_game_state_degrees:
+			next_index = current_index + standard_game_state_degrees[term]
+			self.game_state_slices[term] = self.state_slices[df.game_state][:, current_index:next_index]
 			current_index = next_index
 
-		self.game_state_slices[df.tile_resource].shape = (gs.tile_count, gs.resource_type_count_tile)
-		self.game_state_slices[df.tile_roll_number].shape = (gs.tile_count, gs.roll_number_count)
-		self.game_state_slices[df.vertex_has_port].shape = (gs.vertex_count, gs.port_type_count)
+		# self.game_state_slices.update(self.extra_game_state)
+
+		self.game_state_slices[df.tile_resource].shape = (game_count, gs.tile_count, gs.resource_type_count_tile)
+		self.game_state_slices[df.tile_roll_number].shape = (game_count, gs.tile_count, gs.roll_number_count)
+		self.game_state_slices[df.vertex_has_port].shape = (game_count, gs.vertex_count, gs.port_type_count)
 
 		self.bank_development_card_count = self.game_state_slices[df.bank_development_card_count]
 		self.longest_road_length = self.game_state_slices[df.longest_road_length]
@@ -51,6 +103,16 @@ class State:
 		self.current_player_trade = self.game_state_slices[df.current_player_trade]
 		self.current_roll = self.game_state_slices[df.current_roll]
 		self.vertex_has_port = self.game_state_slices[df.vertex_has_port]
+		# self.current_player_index = self.game_state_slices[df.current_player_index]
+		# self.must_move_robber_index = self.game_state_slices[df.must_move_robber_index]
+		# self.owns_largest_army_index = self.game_state_slices[df.owns_largest_army_index]
+		# self.owns_longest_road_index = self.game_state_slices[df.owns_longest_road_index]
+		# self.offering_trade_index = self.game_state_slices[df.offering_trade_index]
+		# self.tile_has_robber_index = self.game_state_slices[df.tile_has_robber_index]
+		# self.tile_resource_index = self.game_state_slices[df.tile_resource_index]
+		# self.tile_roll_number_index = self.game_state_slices[df.tile_roll_number_index]
+		# self.current_roll_index = self.game_state_slices[df.current_roll_index]
+		# self.port_resource_index = self.game_state_slices[df.port_resource_index]
 
 		self.private_state_slices = []
 		for player_index in gs.player_list:
@@ -58,27 +120,64 @@ class State:
 			current_index = 0
 			for term in private_state_degrees:
 				next_index = current_index + private_state_degrees[term]
-				private_state_slice[term] = self.state_slices[df.private_state][player_index, current_index:next_index]
+				private_state_slice[term] = self.state_slices[df.private_state][:, player_index, current_index:next_index]
 				current_index = next_index
 			self.private_state_slices.append(private_state_slice)
 		self.public_state_slices = []
 		for player_index in gs.player_list:
 			current_index = 0
 			public_state_slice = {}
-			for term in public_state_degrees:
-				next_index = current_index + public_state_degrees[term]
-				public_state_slice[term] = self.state_slices[df.public_state][player_index, current_index:next_index]
+			for term in standard_public_state_degrees:
+				next_index = current_index + standard_public_state_degrees[term]
+				public_state_slice[term] = self.state_slices[df.public_state][:, player_index, current_index:next_index]
 				current_index = next_index
+			# for term in extra_public_state_degrees:
+			# 	public_state_slice[term] = self.extra_public_state[term][:, player_index, :]
+
 			self.public_state_slices.append(public_state_slice)
 
 	def for_player(self, player_index):
 		observation_order = [i for i in gs.player_list]
 		observation_order.insert(player_index, observation_order.pop(observation_order.index(player_index)))
 		game_view = self.state_slices[df.game_state].copy()
-		private_view = self.state_slices[df.private_state][player_index].copy()
-		public_view = self.state_slices[df.public_state][observation_order].copy()
-		public_view.shape = (self.public_state_len * gs.player_count)
+		private_view = self.state_slices[df.private_state][:, player_index].copy()
+		public_view = self.state_slices[df.public_state][:, observation_order].copy()
+		public_view.shape = (self.game_count, self.public_state_len * gs.player_count)
 		return np.hstack([game_view, private_view, public_view])
 
-	def reset(self):
-		self.state.fill(0)
+	def reset(self, game_index):
+		self.state[game_index].fill(0)
+		# for term in self.extra_public_state:
+		# 	self.extra_public_state[term].fill(0)
+		# for term in self.extra_game_state:
+		# 	self.extra_game_state[term].fill(0)
+		# if self.condensed_state:
+		# 	self.game_state_slices[df.current_player_index].fill(-1)
+		# 	self.game_state_slices[df.must_move_robber_index].fill(-1)
+		# 	self.game_state_slices[df.owns_largest_army_index].fill(-1)
+		# 	self.game_state_slices[df.owns_longest_road_index].fill(-1)
+		# 	self.game_state_slices[df.offering_trade_index].fill(-1)
+		# 	self.game_state_slices[df.current_roll_index].fill(-1)
+		# 	self.game_state_slices[df.tile_has_robber_index].fill(-1)
+		# 	self.game_state_slices[df.tile_resource_index].fill(-1)
+		# 	self.game_state_slices[df.tile_roll_number_index].fill(-1)
+		# 	self.game_state_slices[df.port_resource_index].fill(-1)
+		# 	for player_index in gs.player_list:
+		# 		self.public_state_slices[player_index][df.settlement_indices].fill(-1)
+		# 		self.public_state_slices[player_index][df.road_indices].fill(-1)
+		# 		self.public_state_slices[player_index][df.city_indices].fill(-1)
+		# else:
+		# 	self.extra_game_state[df.current_player_index].fill(-1)
+		# 	self.extra_game_state[df.must_move_robber_index].fill(-1)
+		# 	self.extra_game_state[df.owns_largest_army_index].fill(-1)
+		# 	self.extra_game_state[df.owns_longest_road_index].fill(-1)
+		# 	self.extra_game_state[df.offering_trade_index].fill(-1)
+		# 	self.extra_game_state[df.current_roll_index].fill(-1)
+		# 	self.extra_game_state[df.tile_has_robber_index].fill(-1)
+		# 	self.extra_game_state[df.tile_resource_index].fill(-1)
+		# 	self.extra_game_state[df.tile_roll_number_index].fill(-1)
+		# 	self.extra_game_state[df.port_resource_index].fill(-1)
+		# 	for player_index in gs.player_list:
+		# 		self.public_state_slices[player_index][df.settlement_indices].fill(-1)
+		# 		self.public_state_slices[player_index][df.road_indices].fill(-1)
+		# 		self.public_state_slices[player_index][df.city_indices].fill(-1)

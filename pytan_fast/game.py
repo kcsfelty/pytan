@@ -1,13 +1,12 @@
 import random
-import random
-import time
 from abc import ABC
 from itertools import cycle
+from typing import Tuple
 
 import numpy as np
 import tensorflow as tf
 from tf_agents.environments import PyEnvironment
-from tf_agents.specs import array_spec, BoundedTensorSpec, BoundedArraySpec
+from tf_agents.specs import BoundedArraySpec, ArraySpec
 from tf_agents.trajectories import TimeStep, StepType
 from tf_agents.typing import types
 
@@ -15,16 +14,14 @@ import pytan_fast.definitions as df
 from pytan_fast.board import Board
 from pytan_fast.handler import Handler
 from pytan_fast.player import Player
-from pytan_fast.random_agent import RandomAgent
-from pytan_fast.settings import player_count, development_card_count_per_type, resource_card_count_per_type, knight_index
+from pytan_fast.settings import player_count, development_card_count_per_type, resource_card_count_per_type
 from pytan_fast.states.state import State
 from util.Dice import Dice
 
 rng = np.random.default_rng()
 
-expected_steps = 9999
-overall_point_reduction = 10
-time_drain_reward = overall_point_reduction / expected_steps
+action_count = 379
+observation_count = 1402
 
 
 def reverse_histogram(hist):
@@ -33,33 +30,32 @@ def reverse_histogram(hist):
 	return hist
 
 
-first_step_type = tf.convert_to_tensor(np.expand_dims(StepType.FIRST, axis=0))
-mid_step_type = tf.convert_to_tensor(np.expand_dims(StepType.MID, axis=0))
-last_step_type = tf.convert_to_tensor(np.expand_dims(StepType.LAST, axis=0))
-
-
 class PyTanFast(PyEnvironment, ABC):
-	def __init__(self, agent_list=None, global_step=None, log_dir="./training", victory_point_limit=10):
-		super().__init__()
+	def __init__(self, game_count=1, global_step=None, log_dir="./logs"):
+
+		super(PyTanFast, self).__init__(
+			handle_auto_reset=True
+		)
+		self.game_count = game_count
 
 		# Summaries
 		self.log_dir = log_dir + "/game"
 		self.episode_number = 0
-		self.writer = tf.compat.v2.summary.create_file_writer(self.log_dir)
+		self.writer = tf.summary.create_file_writer(logdir=self.log_dir)
 
 		# Environment
+		self.step_type = np.ones((player_count, self.game_count), dtype=np.int32)
+		self.reward = np.zeros((player_count, self.game_count), dtype=np.float32)
+		self.discount = np.ones((player_count, self.game_count), dtype=np.float32)
 		self.global_step = global_step
-		self.state = State()
+		self.state = State(self.game_count, player_count)
 		self.board = Board(self.state, self)
-		self.agent_list = agent_list or [None] * 3
 		self.player_list = None
-		self.victory_point_limit = victory_point_limit
 
 		if not self.player_list:
 			self.player_list = [Player(
 				index=player_index,
 				game=self,
-				agent=self.agent_list[player_index],
 				private_state=self.state.private_state_slices[player_index],
 				public_state=self.state.public_state_slices[player_index],
 			) for player_index in range(player_count)]
@@ -70,90 +66,79 @@ class PyTanFast(PyEnvironment, ABC):
 						player.other_players.append(other_player)
 
 		self.handler = Handler(self)
-		self.immediate_play = []
 		self.dice = Dice()
 
 		# Driver helpers
-		self.num_step = None
-		# self.turn_limit = None
-		self.step_limit = None
-		self.last_victory_points = np.zeros(player_count, dtype=np.float_)
-		self.player_cycle = None
-		self.current_player = None
-		self.winning_player = None
-		self.current_time_step_type = first_step_type
-		self.total_steps = 0
+		self.min_turns = np.inf
+		self.crash_log = [[]] * game_count
+		self.num_step = [0] * game_count
+		self.player_cycle = [None] * game_count
+		self.player_order_build_phase = [[0, 1, 2] for _ in range(game_count)]
+		self.player_order_build_phase_reversed = [[2, 1, 0] for _ in range(game_count)]
+		self.current_player = [None] * game_count
+		self.winning_player = [None] * game_count
 
 		# Game logic helpers
-		self.development_card_stack = []
-		self.trading_player = None
-		self.longest_road_owner = None
-		self.largest_army_owner = None
-		self.player_trades_this_turn = 0
-		self.resolve_road_building_count = 0
-		self.max_victory_points = 0
-		self.bank_resource_tuple = tuple(self.state.bank_resources)
+		self.development_card_stack = [[] for _ in range(game_count)]
+		self.trading_player = [None] * game_count
+		self.longest_road_owner = [None] * game_count
+		self.largest_army_owner = [None] * game_count
+		self.player_trades_this_turn = [0] * game_count
+		self.resolve_road_building_count = [0] * game_count
 
-		self._action_spec = BoundedArraySpec(shape=(), dtype=np.int32, minimum=0, maximum=379 - 1, name='action'),
+		self._action_spec = (BoundedArraySpec(
+			shape=(game_count,),
+			dtype=np.int32,
+			minimum=0,
+			maximum=action_count - 1,
+			name='action'),) * player_count
 
+		self._discount_spec = BoundedArraySpec(
+			shape=(game_count,),
+			dtype=np.float32,
+			minimum=0.,
+			maximum=1.,
+			name='discount')
 		self._observation_spec = (
-			BoundedArraySpec(shape=(len(self.state.for_player(0)),), dtype=np.int32, minimum=0, maximum=128, name='observation'),
-			BoundedArraySpec(shape=(379,), dtype=np.int32, minimum=0, maximum=1, name='action_mask'))
+			BoundedArraySpec(
+				shape=(game_count, observation_count,),
+				dtype=np.int32,
+				minimum=0,
+				maximum=127,
+				name='observation'),
+			BoundedArraySpec(
+				shape=(game_count, action_count,),
+				dtype=np.int32,
+				minimum=0,
+				maximum=1,
+				name='action_mask'))
+		self._reward_spec = BoundedArraySpec(
+			shape=(game_count,),
+			dtype=np.float32,
+			minimum=-1.,
+			maximum=1.,
+			name='reward')
+		self._step_type_spec = ArraySpec(
+			shape=(game_count,),
+			dtype=np.int32,
+			name='step_type')
+		self._time_step_spec = TimeStep(
+			step_type=self._step_type_spec,
+			reward=self._reward_spec,
+			discount=self._discount_spec,
+			observation=self._observation_spec
+		) * player_count
 
-	def run(self, step_limit=600):
-		self.total_steps = 0
-		while self.total_steps < step_limit:
-			self.decide(self.immediate_play.pop(0) if self.immediate_play else self.current_player)
-			if self.winning_player:
-				self.end_game()
-				self._reset()
-		return self.total_steps
+	@property
+	def batched(self) -> bool:
+		return True
 
-	def decide(self, active_player):
-		self.num_step += 1
-		self.total_steps += 1
-		self.global_step += 1
-		for player in self.player_list:
-			player.start_trajectory()
-		self.handler.handle_action(active_player.last_action, active_player)
-		for player in self.player_list:
-			player.end_trajectory()
+	@property
+	def batch_size(self) -> int:
+		return self.game_count * player_count
 
-	def build_phase(self, player_order):
-		for build_player in player_order:
-			build_player.dynamic_mask.only(df.place_settlement)
-			np.logical_and(build_player.dynamic_mask.place_settlement, self.state.vertex_open, out=build_player.dynamic_mask.place_settlement)
-			self.decide(build_player)
-			self.current_time_step_type = mid_step_type
-			self.decide(build_player)
-			build_player.dynamic_mask.only(df.no_action)
-
-	def start_game(self):
-		player_order = random.sample(self.player_list, len(self.player_list))
-		self.player_cycle = cycle([x for x in player_order])
-
-		self.build_phase(player_order)
-		player_order.reverse()
-		self.state.build_phase_reversed.fill(1)
-		self.build_phase(player_order)
-		self.state.build_phase.fill(0)
-		self.state.build_phase_reversed.fill(0)
-		self.current_player = next(self.player_cycle)
-		self.current_player.dynamic_mask.only(df.roll_dice)
-		for player in self.player_list:
-			player.static_mask.buy_development_card.fill(1)
-
-	def end_game(self):
-		for player in self.player_list:
-			player.agent.write_summary(player.get_episode_summaries(), self.global_step)
-		self.write_episode_summary()
-		self.episode_number += 1
-
-	def write_episode_summary(self):
-		print("Game finished: {} turns, {} steps".format(self.state.turn_number.item(), self.num_step,), self.winning_player)
-
-		with self.writer.as_default():
-			tf.summary.scalar(name="turn_count", data=self.state.turn_number.item(), step=self.global_step.item())
+	def reward_spec(self) -> types.NestedArraySpec:
+		return self._reward_spec
 
 	def action_spec(self) -> types.NestedArraySpec:
 		return self._action_spec
@@ -161,78 +146,160 @@ class PyTanFast(PyEnvironment, ABC):
 	def observation_spec(self) -> types.NestedArraySpec:
 		return self._observation_spec
 
-	def _step(self, action: types.NestedArray) -> TimeStep:
-		pass
+	def discount_spec(self) -> types.NestedArraySpec:
+		return self._discount_spec
+
+	def time_step_spec(self) -> TimeStep:
+		return self._time_step_spec
+
+	def should_reset(self, current_time_step) -> bool:
+		return False
+
+	def write_episode_summary(self, game_index):
+		turn = self.state.turn_number[game_index].item()
+		step = self.num_step[game_index]
+		global_step = self.global_step.numpy().item()
+		summary = ""
+		summary += "[env:{}] ".format(str(game_index).rjust(5))
+		summary += "[turns:{}] ".format(str(turn).rjust(5))
+		summary += "[steps:{}] ".format(str(step).rjust(6))
+		summary += "[global:{}]   ".format(str(global_step).rjust(10))
+		if self.winning_player[game_index]:
+			summary += str(self.winning_player[game_index].for_game(game_index))
+		print(summary)
+
+		with self.writer.as_default(step=global_step):
+			tf.summary.scalar(name="turn_count", data=turn)
+
+		if turn < self.min_turns:
+			if turn < 20:
+				print(self.get_crash_log(None, game_index, add_state=False))
+
+	def add_state_to_crash_log(self, player, game_index):
+		for term in self.state.game_state_slices:
+			term_str = str(term) + ", " + str(self.state.game_state_slices[term][game_index])
+			self.crash_log[game_index].append(term_str)
+		for term in player.public_state:
+			term_str = str(term) + ", " + str(player.public_state[term][game_index])
+			self.crash_log[game_index].append(term_str)
+		for term in player.private_state:
+			term_str = str(term) + ", " + str(player.private_state[term][game_index])
+			self.crash_log[game_index].append(term_str)
+
+	def get_crash_log(self, player, game_index, add_state=True):
+		if add_state:
+			self.add_state_to_crash_log(player or None, game_index)
+			self.crash_log[game_index].append(player.for_game(game_index))
+		return "\n".join(self.crash_log[game_index])
+
+	def _step(self, action_list: types.NestedArray) -> tuple[TimeStep, ...]:
+		self.step_type = np.ones((player_count, self.game_count), dtype=np.int32)
+		self.reward = np.zeros((player_count, self.game_count), dtype=np.float32)
+		self.discount = np.ones((player_count, self.game_count), dtype=np.float32)
+		for game_index in range(self.game_count):
+			if self.winning_player[game_index]:
+				self.write_episode_summary(game_index)
+				self.reset_game(game_index)
+				self.step_type[:, game_index] = 0
+			if self.state.turn_number[game_index].item() >= 1000:
+				self.reset_game(game_index)
+				self.step_type[:, game_index] = 0
+				self.reward[:, game_index] = -1
+
+			else:
+				#action_queue = []
+				for player_index in range(player_count):
+					self.global_step.assign_add(1)
+					self.num_step[game_index] += 1
+					action = action_list[player_index][game_index]
+					action_handler, action_args = self.handler.action_lookup[action]
+					if action_handler.__name__ is not "handle_no_action":
+						crash_str = ""
+						crash_str += str(game_index) + " "
+						crash_str += self.player_list[player_index].for_game(game_index) + " "
+						crash_str += str(self.player_list[player_index].resource_cards[game_index]) + " "
+						crash_str += action_handler.__name__ + " "
+						crash_str += str(action_args) if action_args is not None else "" + " "
+						self.crash_log[game_index].append(crash_str)
+					#action_queue.append((action_handler, (action_args, self.player_list[player_index], game_index)))
+					action_handler(action_args, self.player_list[player_index], game_index)
+				for player_index in range(player_count):
+					assert not np.any(self.player_list[player_index].resource_cards[game_index] < 0), self.get_crash_log(self.player_list[player_index], game_index)
+				# for handler, args in action_queue:
+				# 	handler(*args)
+			if self.winning_player[game_index]:
+				winning_player_index = self.winning_player[game_index].index
+				self.step_type[:, game_index] = StepType.LAST
+				self.discount[:, game_index] = 0.
+				self.reward[:, game_index] = -1
+				self.reward[winning_player_index, game_index] = 1
+
+		return self.get_time_step()
 
 	def _reset(self):
-		self.state.reset()
-		self.board.reset()
-		self.last_victory_points.fill(0)
-		self.development_card_stack = reverse_histogram(development_card_count_per_type)
-		self.state.bank_development_card_count += sum(development_card_count_per_type)
-		self.state.bank_resources += resource_card_count_per_type
-		self.state.build_phase.fill(1)
-		self.num_step = 0
-		self.state.vertex_open.fill(1)
-		self.state.edge_open.fill(1)
-		self.player_cycle = None
-		self.current_player = None
-		self.winning_player = None
-		self.trading_player = None
-		self.longest_road_owner = None
-		self.largest_army_owner = None
-		self.player_trades_this_turn = 0
-		self.resolve_road_building_count = 0
-		self.current_time_step_type = first_step_type
-		self.immediate_play = []
-		self.max_victory_points = 0
-		self.bank_resource_tuple = tuple(self.state.bank_resources)
+		print("Resetting all games")
+		reset_games = [x for x in range(self.game_count)]
+		for game_index in reset_games:
+			self.reset_game(game_index)
+		return self.get_time_step()
 
-		for player in self.player_list: player.reset()
-		for tile in self.board.tiles: tile.reset()
-		for vertex in self.board.vertices: vertex.reset()
-		for edge in self.board.edges: edge.reset()
+	def reset_game(self, game_index):
+		self.state.reset(game_index)
+		self.board.reset(game_index)
+		self.development_card_stack[game_index] = reverse_histogram(development_card_count_per_type)
+		self.state.bank_development_card_count[game_index] += sum(development_card_count_per_type)
+		self.state.bank_resources[game_index] += resource_card_count_per_type
+		self.state.build_phase[game_index].fill(1)
+		self.num_step[game_index] = 0
+		self.state.vertex_open[game_index].fill(1)
+		self.state.edge_open[game_index].fill(1)
+		self.player_cycle[game_index] = None
+		self.current_player[game_index] = None
+		self.winning_player[game_index] = None
+		self.trading_player[game_index] = None
+		self.longest_road_owner[game_index] = None
+		self.largest_army_owner[game_index] = None
+		self.player_trades_this_turn[game_index] = 0
+		self.resolve_road_building_count[game_index] = 0
+		self.crash_log[game_index] = [""]
 
-		self.start_game()
+		for player in self.player_list: player.reset(game_index)
+		for tile in self.board.tiles: tile.reset(game_index)
+		for vertex in self.board.vertices: vertex.reset(game_index)
+		for edge in self.board.edges: edge.reset(game_index)
 
-	def get_observation(self, player):
-		obs = np.expand_dims(self.state.for_player(player.index), axis=0)
-		mask = np.expand_dims(player.dynamic_mask.mask, axis=0)
-		obs = tf.convert_to_tensor(obs, dtype=tf.int32)
-		mask = tf.convert_to_tensor(mask, dtype=tf.int32)
-		return obs, mask
+		for player in self.player_list:
+			player.dynamic_mask.only(df.no_action, game_index)
 
-	def get_discount(self, exp_scale=2, offset=3):
-		result = 1. - ((self.max_victory_points - offset) / self.victory_point_limit) ** exp_scale
-		# result = 0.90
-		result = np.expand_dims(result, axis=0)
-		# result = np.expand_dims(0.96, axis=0)
-		result = tf.convert_to_tensor(result, dtype=tf.float32)
-		return result
+		player_index_list = [x for x in range(player_count)]
+		player_order = random.sample(player_index_list, len(player_index_list))
+		self.player_order_build_phase[game_index] = [x for x in player_order]
+		player_order.reverse()
+		self.player_order_build_phase_reversed[game_index] = [x for x in player_order]
+		self.player_cycle[game_index] = cycle([x for x in player_order])
+		first_player_index = self.player_order_build_phase[game_index].pop(0)
+		first_player = self.player_list[first_player_index]
+		first_player.dynamic_mask.only(df.place_settlement, game_index)
+		first_player.current_player[game_index].fill(True)
+		#np.logical_and(
+		#	first_player.dynamic_mask.place_settlement[game_index],
+		#	self.state.vertex_open[game_index],
+		#	out=first_player.dynamic_mask.place_settlement[game_index])
 
-	def get_reward(self, player):
-		reward = player.next_reward
-		reward -= time_drain_reward
-		# reward /= 2
-		player.episode_rewards += reward
-		player.next_reward = 0
-		return tf.convert_to_tensor(np.expand_dims(np.array(reward, dtype=np.double), axis=0), dtype=tf.float32)
+	def get_observation(self):
+		obs_list = [self.state.for_player(player_index) for player_index in range(player_count)]
+		mask_list = [self.player_list[player_index].dynamic_mask.mask for player_index in range(player_count)]
+		observation = [(np.array(obs), np.array(mask)) for obs, mask in zip(obs_list, mask_list)]
+		return observation
 
-	def get_time_step(self, player):
-		return TimeStep(self.current_time_step_type, self.get_reward(player), self.get_discount(), self.get_observation(player))
+	def get_player_time_step(self, player_index):
+		obs = self.state.for_player(player_index)
+		mask = self.player_list[player_index].dynamic_mask.mask
+		return TimeStep(
+			step_type=self.step_type[player_index],
+			reward=self.reward[player_index],
+			discount=self.discount[player_index],
+			observation=(obs, mask))
 
-	def get_player_win_rate_order(self, n=50):
-		win_rates = [{"index": player.index, "win_rate": player.win_rate(n)} for player in self.player_list]
-		return [player_win_dict["index"] for player_win_dict in sorted(win_rates, key=lambda x: x["win_rate"], reverse=True)]
-
-	# def get_random_agent_list(self):
-	# 	env_specs = {
-	# 		"env_observation_spec": self.observation_spec,
-	# 		"env_action_spec": self.action_spec,
-	# 		"env_time_step_spec": self.time_step_spec,
-	# 	}
-	# 	return [RandomAgent(
-	# 		env_specs=env_specs,
-	# 		player_index=player_index,
-	# 		log_dir=self.log_dir
-	# 	) for player_index in range(player_count)]
+	def get_time_step(self):
+		return tuple(self.get_player_time_step(player_index) for player_index in range(3))
