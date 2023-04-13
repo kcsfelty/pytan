@@ -12,8 +12,6 @@ from geometry.get_vertex_list import get_vertex_list
 from geometry.get_vertex_tiles import get_vertex_tiles
 from geometry.get_vertex_vertices import get_vertex_vertices
 from pytan_fast import settings
-from pytan_fast.definitions import tile_has_robber, tile_resource, tile_roll_number, vertex_settlement, vertex_city, \
-	vertex_open, edge_open, vertex_has_port
 from pytan_fast.edge import Edge
 from pytan_fast.settings import desert_index
 from pytan_fast.tile import Tile
@@ -101,27 +99,17 @@ class Board:
 			edge.build_adjacent_edge_vertex()
 
 	def reset(self, game_index, board_layout=None, port_layout=None):
-		# tile_resource_count = reverse_histogram([x for x in settings.tile_resource_count])
-		# tile_roll_number_count = reverse_histogram([x for x in settings.tile_roll_number_count_per_type])
-		# tile_roll_number_count.insert(tile_resource_count.index(desert_index), -1)
-		# self.roll_hash = [[] for _ in gs.roll_list]
-		# self.game.state.tile_resource_index[:] = tile_resource_count
-		# self.game.state.tile_roll_number_index[:] = tile_roll_number_count
+		self.roll_hash[game_index] = [[] for _ in gs.roll_list]
+		self.robbed_tile[game_index] = None
 		tile_resource_layout, tile_roll_number_layout = board_layout or self.get_board_layout()
 		for tile, resource_index, roll_index in zip(self.tiles, tile_resource_layout, tile_roll_number_layout):
 			if roll_index != -1:
 				tile.resource[game_index][resource_index] = 1
 				tile.roll_number[game_index][roll_index] = 1
-				tile.resource_index = resource_index
 				self.roll_hash[game_index][roll_index].append(tile)
 			else:
 				tile.has_robber[game_index].fill(1)
-				# self.game.state.tile_has_robber_index.fill(tile.index)
 				self.robbed_tile[game_index] = tile
-
-		# port_type_count = reverse_histogram([x for x in settings.port_type_count_per_type])
-		# port_vertex_groups = [(self.vertex_hash[port_a], self.vertex_hash[port_b]) for port_a, port_b in settings.port_vertex_groups]
-		# self.game.state.port_resource_index[:] = port_type_count
 		port_layout = port_layout or self.get_port_layout()
 		for vertices, port_type in zip(self.port_vertex_lookup, port_layout):
 			vertex_a, vertex_b = vertices

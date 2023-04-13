@@ -1,8 +1,3 @@
-import numpy as np
-import pytan_fast.definitions as df
-from pytan_fast.settings import tile_roll_number_type_count, resource_type_count_tile
-
-
 class Vertex:
 	def __repr__(self):
 		return "Vertex{}".format(self.key)

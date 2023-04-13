@@ -12,7 +12,6 @@ class Tile:
 		self.vertices = []
 		self.edges = []
 
-		self.resource_index = None
 		self.has_robber = has_robber
 		self.resource = resource
 		self.roll_number = roll_number

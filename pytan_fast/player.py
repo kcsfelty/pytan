@@ -1,35 +1,13 @@
-from multiprocessing import Process
-
 import numpy as np
-from tf_agents import trajectories
-from tf_agents.trajectories import PolicyStep, StepType
-import tensorflow as tf
+
 import pytan_fast.definitions as df
-from pytan_fast.mask import Mask
 import pytan_fast.settings as gs
-
-last_step_type = tf.convert_to_tensor(np.expand_dims(StepType.LAST, axis=0))
-
-policy_step_cache = [PolicyStep(action=tf.expand_dims(tf.convert_to_tensor(action_code, dtype=tf.int32), axis=0)) for action_code in range(379)]
+from pytan_fast.mask import Mask
 
 
 class Player:
 	def __repr__(self):
 		return "<Player{}>".format(self.index)
-		# return "Player{} VP={} R={} D={} | S={} C={} R={} LA={}{} LR={}{} IAR={}%".format(
-		# 	self.index,
-		# 	str(int(self.actual_victory_points)).ljust(2),
-		# 	str(self.resource_cards).ljust(15),
-		# 	str(self.development_cards_played.tolist()).ljust(15),
-		# 	str(int(self.settlement_count)).ljust(3),
-		# 	str(int(self.city_count)).ljust(3),
-		# 	str(int(self.road_count)).ljust(3),
-		# 	str(self.development_cards_played[gs.knight_index]).rjust(2),
-		# 	"+" if self.owns_largest_army else " ",
-		# 	str(self.longest_road).rjust(2),
-		# 	"+" if self.owns_longest_road else " ",
-		# 	str(int(self.policy_action_count / (self.implicit_action_count + 1e-9) * 1e2))
-		# )
 
 	def for_game(self, game_index):
 		return "{}Player{} S={} C={} R={} VC={} LA={}{} LR={}{}".format(
@@ -83,7 +61,6 @@ class Player:
 		self.win_list = []
 		self.edge_list = [[] for _ in range(self.game.game_count)]
 		self.actual_victory_points = [0 for _ in range(self.game.game_count)]
-		self.episode_rewards = [[] for _ in range(self.game.game_count)]
 		self.edge_proximity_vertices = [[] for _ in range(self.game.game_count)]
 
 		# Diagnostics / Statistics
@@ -107,7 +84,6 @@ class Player:
 		self.implicit_action_count = 0
 		self.edge_list[game_index] = []
 		self.actual_victory_points[game_index] = 0
-		self.episode_rewards = 0
 		self.distribution_total[game_index].fill(0)
 		self.steal_total[game_index].fill(0)
 		self.stolen_total[game_index].fill(0)
@@ -170,7 +146,9 @@ class Player:
 				able_to_navigate = False
 				for neighbor_vertex in vertex.vertices:
 					vertices_edge = vertex.edge_between_vertex[neighbor_vertex]
-					if vertices_edge not in self.edge_list[game_index]:
+					if not self.owned_edges[game_index][vertices_edge.index]:
+						continue
+					if neighbor_vertex.owned_by[game_index] in self.other_players:
 						continue
 					if vertices_edge not in path_thus_far:
 						agenda.insert(0, (neighbor_vertex, path_thus_far + [vertices_edge]))
@@ -182,7 +160,6 @@ class Player:
 
 	def get_episode_summaries(self, game_index):
 		scalars = {
-			"episode_rewards": self.episode_rewards,
 			"victory_points": self.victory_points.item(),
 			"settlements": self.settlement_count.item(),
 			"cities": self.city_count.item(),

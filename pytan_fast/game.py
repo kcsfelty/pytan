@@ -1,5 +1,6 @@
 import concurrent.futures
 import random
+import time
 from abc import ABC
 from itertools import cycle
 from typing import Tuple
@@ -70,6 +71,8 @@ class PyTanFast(PyEnvironment, ABC):
 		self.dice = Dice()
 
 		# Driver helpers
+		self.last_game_at_step = 0
+		self.last_game_at_time = time.perf_counter()
 		self.min_turns = np.inf
 		self.crash_log = [[]] * game_count
 		self.num_step = [0] * game_count
@@ -160,11 +163,17 @@ class PyTanFast(PyEnvironment, ABC):
 		turn = self.state.turn_number[game_index].item()
 		step = self.num_step[game_index]
 		global_step = self.global_step.numpy().item()
+		time_delta = time.perf_counter() - self.last_game_at_time
+		self.last_game_at_time = time.perf_counter()
+		step_delta = global_step - self.last_game_at_step
+		self.last_game_at_step = int(global_step)
+		rate = int(step_delta / time_delta)
 		summary = ""
 		summary += "[env:{}] ".format(str(game_index).rjust(5))
 		summary += "[turns:{}] ".format(str(turn).rjust(5))
 		summary += "[steps:{}] ".format(str(step).rjust(6))
 		summary += "[global:{}]   ".format(str(global_step).rjust(10))
+		summary += "[rate:{}]   ".format(str(rate).rjust(6))
 		if self.winning_player[game_index]:
 			summary += str(self.winning_player[game_index].for_game(game_index))
 		print(summary)
@@ -177,15 +186,16 @@ class PyTanFast(PyEnvironment, ABC):
 				print(self.get_crash_log(None, game_index, add_state=False))
 
 	def add_state_to_crash_log(self, player, game_index):
-		for term in self.state.game_state_slices:
-			term_str = str(term) + ", " + str(self.state.game_state_slices[term][game_index])
-			self.crash_log[game_index].append(term_str)
-		for term in player.public_state:
-			term_str = str(term) + ", " + str(player.public_state[term][game_index])
-			self.crash_log[game_index].append(term_str)
-		for term in player.private_state:
-			term_str = str(term) + ", " + str(player.private_state[term][game_index])
-			self.crash_log[game_index].append(term_str)
+		pass
+		# for term in self.state.game_state_slices:
+		# 	term_str = str(term) + ", " + str(self.state.game_state_slices[term][game_index])
+		# 	self.crash_log[game_index].append(term_str)
+		# for term in player.public_state:
+		# 	term_str = str(term) + ", " + str(player.public_state[term][game_index])
+		# 	self.crash_log[game_index].append(term_str)
+		# for term in player.private_state:
+		# 	term_str = str(term) + ", " + str(player.private_state[term][game_index])
+		# 	self.crash_log[game_index].append(term_str)
 
 	def get_crash_log(self, player, game_index, add_state=True):
 		if add_state:
@@ -193,10 +203,11 @@ class PyTanFast(PyEnvironment, ABC):
 			self.crash_log[game_index].append(player.for_game(game_index))
 		return "\n".join(self.crash_log[game_index])
 
-	def add_action_to_crash_loc(self, game_index, player_index, action_handler, action_args):
+	def add_action_to_crash_log(self, game_index, player_index, action_handler, action_args):
 		if action_handler.__name__ is not "handle_no_action":
 			crash_str = ""
 			crash_str += str(game_index) + " "
+			crash_str += str(self.state.turn_number[game_index]) + " "
 			crash_str += self.player_list[player_index].for_game(game_index) + " "
 			crash_str += str(self.player_list[player_index].resource_cards[game_index]) + " "
 			crash_str += action_handler.__name__ + " "
@@ -217,14 +228,14 @@ class PyTanFast(PyEnvironment, ABC):
 				self.step_type[:, game_index] = StepType.FIRST
 				self.reward[:, game_index] = -1
 			else:
-				with concurrent.futures.ThreadPoolExecutor(max_workers=32) as executor:
+				with concurrent.futures.ThreadPoolExecutor(max_workers=2 ** 8) as executor:
 					futures = []
 					for player_index in range(player_count):
 						self.global_step.assign_add(1)
 						self.num_step[game_index] += 1
 						action = action_list[player_index][game_index]
 						action_handler, action_args = self.handler.action_lookup[action]
-						self.add_action_to_crash_loc(game_index, player_index, action_handler, action_args)
+						self.add_action_to_crash_log(game_index, player_index, action_handler, action_args)
 						args = action_args, self.player_list[player_index], game_index
 						futures.append(executor.submit(action_handler, *args))
 						# action_handler(*args)
@@ -284,6 +295,7 @@ class PyTanFast(PyEnvironment, ABC):
 		first_player = self.player_list[first_player_index]
 		first_player.dynamic_mask.only(df.place_settlement, game_index)
 		first_player.current_player[game_index].fill(True)
+		self.current_player[game_index] = first_player
 		np.logical_and(
 			first_player.dynamic_mask.place_settlement[game_index],
 			self.state.vertex_open[game_index],
