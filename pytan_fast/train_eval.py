@@ -17,7 +17,11 @@ def train_eval(
 		train_interval=1,
 		eval_interval=1,
 		log_interval=100,
+		replay_buffer_size=1000,
+		replay_batch_size=1000,
+		multiprocessing=False,
 	):
+	global_step = tf.Variable(0, dtype=tf.int32)
 
 	def maybe_train():
 		if global_step.numpy() % train_interval == 0:
@@ -47,19 +51,20 @@ def train_eval(
 			maybe_eval()
 			maybe_log()
 
-	class ParallelPyTan(PyTanFast, ABC):
-		def __init__(self):
-			super().__init__(game_count=game_count, global_step=global_step, worker_count=thread_count)
+	if multiprocessing:
+		class ParallelPyTan(PyTanFast, ABC):
+			def __init__(self):
+				super().__init__(game_count=game_count, global_step=global_step, worker_count=thread_count)
+		env_list = [ParallelPyTan] * process_count
+		py_env = ParallelPyEnvironment(env_list)
+	else:
+		py_env = PyTanFast(game_count, global_step)
 
-	env_list = [ParallelPyTan] * process_count
-	parallel_env = ParallelPyEnvironment(env_list)
-	global_step = tf.Variable(0, dtype=tf.int32)
-	game = PyTanFast(game_count, global_step)
-	env = tf_py_environment.TFPyEnvironment(game)
+	env = tf_py_environment.TFPyEnvironment(py_env)
 	agent_list = [Agent(
 		game_count=game_count,
-		replay_buffer_size=1000,
-		replay_batch_size=1000) for _ in range(player_count)]
+		replay_buffer_size=replay_buffer_size,
+		replay_batch_size=replay_batch_size) for _ in range(player_count)]
 	meta = MetaAgent(agent_list, game_count)
 	start = time.perf_counter()
 	run()
