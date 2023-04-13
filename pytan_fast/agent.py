@@ -22,7 +22,7 @@ class Agent:
 				 n_step_update=1,
 				 replay_buffer_size=1000,
 				 learn_rate=0.0001,
-				 fc_layer_params=(2 ** 8, 2 ** 8, 2 ** 7, 2 ** 7, 2 ** 6, 2 ** 6,),
+				 fc_layer_params=(2 ** 6, 2 ** 6, 2 ** 6,),
 				 game_count=1,
 				 replay_batch_size=250,
 				 ):

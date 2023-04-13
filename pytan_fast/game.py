@@ -33,7 +33,7 @@ def reverse_histogram(hist):
 
 
 class PyTanFast(PyEnvironment, ABC):
-	def __init__(self, game_count=1, global_step=None, log_dir="./logs"):
+	def __init__(self, game_count=1, global_step=None, worker_count=1, log_dir="./logs"):
 
 		super(PyTanFast, self).__init__(
 			handle_auto_reset=True
@@ -53,6 +53,7 @@ class PyTanFast(PyEnvironment, ABC):
 		self.state = State(self.game_count, player_count)
 		self.board = Board(self.state, self)
 		self.player_list = None
+		self.worker_count = worker_count
 
 		if not self.player_list:
 			self.player_list = [Player(
@@ -228,7 +229,7 @@ class PyTanFast(PyEnvironment, ABC):
 				self.step_type[:, game_index] = StepType.FIRST
 				self.reward[:, game_index] = -1
 			else:
-				with concurrent.futures.ThreadPoolExecutor(max_workers=2 ** 8) as executor:
+				with concurrent.futures.ThreadPoolExecutor(max_workers=self.worker_count) as executor:
 					futures = []
 					for player_index in range(player_count):
 						self.global_step.assign_add(1)
@@ -238,7 +239,6 @@ class PyTanFast(PyEnvironment, ABC):
 						self.add_action_to_crash_log(game_index, player_index, action_handler, action_args)
 						args = action_args, self.player_list[player_index], game_index
 						futures.append(executor.submit(action_handler, *args))
-						# action_handler(*args)
 					for future in concurrent.futures.as_completed(futures):
 						future.result()
 			if self.winning_player[game_index]:
@@ -317,4 +317,4 @@ class PyTanFast(PyEnvironment, ABC):
 			observation=(obs, mask))
 
 	def get_time_step(self):
-		return tuple(self.get_player_time_step(player_index) for player_index in range(3))
+		return tuple(self.get_player_time_step(player_index) for player_index in range(player_count))

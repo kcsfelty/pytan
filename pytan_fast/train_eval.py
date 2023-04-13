@@ -1,6 +1,7 @@
 import time
+from abc import ABC
 
-from tf_agents.environments import tf_py_environment
+from tf_agents.environments import tf_py_environment, ParallelPyEnvironment
 import tensorflow as tf
 from pytan_fast.agent import Agent
 from pytan_fast.game import PyTanFast
@@ -9,8 +10,10 @@ from pytan_fast.settings import player_count
 
 
 def train_eval(
-		game_count=1000,
-		total_steps=250e6,
+		process_count=1,
+		thread_count=1,
+		game_count=2500,
+		total_steps=1e9,
 		train_interval=1,
 		eval_interval=1,
 		log_interval=100,
@@ -44,6 +47,12 @@ def train_eval(
 			maybe_eval()
 			maybe_log()
 
+	class ParallelPyTan(PyTanFast, ABC):
+		def __init__(self):
+			super().__init__(game_count=game_count, global_step=global_step, worker_count=thread_count)
+
+	env_list = [ParallelPyTan] * process_count
+	parallel_env = ParallelPyEnvironment(env_list)
 	global_step = tf.Variable(0, dtype=tf.int32)
 	game = PyTanFast(game_count, global_step)
 	env = tf_py_environment.TFPyEnvironment(game)
