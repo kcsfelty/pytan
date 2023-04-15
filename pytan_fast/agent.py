@@ -8,7 +8,7 @@ import tensorflow as tf
 import tensorflow_probability as tfp
 import numpy as np
 
-from pytan_fast.specs import obs_type_spec, fake_action_spec, fake_time_step_spec
+from pytan_fast.specs import obs_type_spec, fake_action_spec, fake_time_step_spec, observation_count, action_count
 
 support = np.linspace(-1, 1, 51, dtype=np.float32)
 neg_inf = tf.constant(-np.inf, dtype=tf.float32)
@@ -17,6 +17,7 @@ seed_stream = tfp.util.SeedStream(seed=None, salt='tf_agents_tf_policy')
 
 class Agent:
 	def __init__(self,
+				 index,
 				 q_min=-1,
 				 q_max=1,
 				 n_step_update=1,
@@ -25,6 +26,7 @@ class Agent:
 				 fc_layer_params=(2 ** 6, 2 ** 6, 2 ** 6,),
 				 game_count=1,
 				 replay_batch_size=250,
+				 log_dir="./logs"
 				 ):
 		self.categorical_q_net = categorical_q_network.CategoricalQNetwork(
 			input_tensor_spec=obs_type_spec,
@@ -59,12 +61,14 @@ class Agent:
 
 		self.iterator = iter(self.dataset)
 
+		self.writer = tf.summary.create_file_writer(logdir=log_dir + "/agent{}".format(index))
 		self.game_count = game_count
 		self.time_step = None
 		self.action = None
 
 	@tf.function
 	def act(self, time_step):
+		self.add_batch(time_step)
 		obs, mask = time_step.observation
 		activations = self.categorical_q_net(obs)[0]
 		q_values = common.convert_q_logits_to_values(activations, support)
@@ -72,8 +76,7 @@ class Agent:
 		dist = tfp.distributions.Categorical(logits=logits, dtype=tf.float32)
 		action = tf.nest.map_structure(self.sample_logit_distribution, dist)
 		action = tf.cast(action, dtype=tf.int32)
-		action = PolicyStep(action)
-		self.action = action
+		self.action = PolicyStep(action)
 		return action
 
 	def add_batch(self, next_time_step):
@@ -89,7 +92,8 @@ class Agent:
 	def train(self):
 		if self.replay_buffer.num_frames() > self.game_count:
 			exp, _ = next(self.iterator)
-			self.agent.train(exp)
+			with self.writer.as_default():
+				self.agent.train(exp)
 
 	@staticmethod
 	def sample_logit_distribution(distribution):

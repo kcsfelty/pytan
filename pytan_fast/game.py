@@ -8,7 +8,7 @@ from typing import Tuple
 import numpy as np
 import tensorflow as tf
 from tf_agents.environments import PyEnvironment
-from tf_agents.specs import BoundedArraySpec, ArraySpec
+from tf_agents.specs import BoundedArraySpec, ArraySpec, BoundedTensorSpec, TensorSpec
 from tf_agents.trajectories import TimeStep, StepType
 from tf_agents.typing import types
 
@@ -25,6 +25,7 @@ rng = np.random.default_rng()
 action_count = 379
 observation_count = 1402
 
+broadcaster = np.ones(player_count, dtype=np.int32).reshape((player_count, 1))
 
 def reverse_histogram(hist):
 	hist = np.repeat([x for x in range(len(hist))], hist).tolist()
@@ -205,7 +206,7 @@ class PyTanFast(PyEnvironment, ABC):
 		return "\n".join(self.crash_log[game_index])
 
 	def add_action_to_crash_log(self, game_index, player_index, action_handler, action_args):
-		if action_handler.__name__ is not "handle_no_action":
+		if action_handler.__name__ != "handle_no_action":
 			crash_str = ""
 			crash_str += str(game_index) + " "
 			crash_str += str(self.state.turn_number[game_index]) + " "
@@ -216,39 +217,41 @@ class PyTanFast(PyEnvironment, ABC):
 			self.crash_log[game_index].append(crash_str)
 
 	def _step(self, action_list: types.NestedArray) -> tuple[TimeStep, ...]:
+		self.reset_time_step()
+		for game_index in range(self.game_count):
+			if self.winning_player[game_index]:
+				self.complete_game(game_index)
+			else:
+				self.process_game_actions(game_index, action_list)
+			if self.winning_player[game_index]:
+				self.game_has_winner(game_index)
+		return self.get_time_step()
+
+	def reset_time_step(self):
 		self.step_type = np.ones((player_count, self.game_count), dtype=np.int32)
 		self.reward = np.zeros((player_count, self.game_count), dtype=np.float32)
 		self.discount = np.ones((player_count, self.game_count), dtype=np.float32)
-		for game_index in range(self.game_count):
-			if self.winning_player[game_index]:
-				self.write_episode_summary(game_index)
-				self.reset_game(game_index)
-				self.step_type[:, game_index] = StepType.FIRST
-			elif self.state.turn_number[game_index].item() >= 1000:
-				self.reset_game(game_index)
-				self.step_type[:, game_index] = StepType.FIRST
-				self.reward[:, game_index] = -1
-			else:
-				with concurrent.futures.ThreadPoolExecutor(max_workers=self.worker_count) as executor:
-					futures = []
-					for player_index in range(player_count):
-						self.global_step.assign_add(1)
-						self.num_step[game_index] += 1
-						action = action_list[player_index][game_index]
-						action_handler, action_args = self.handler.action_lookup[action]
-						self.add_action_to_crash_log(game_index, player_index, action_handler, action_args)
-						args = action_args, self.player_list[player_index], game_index
-						futures.append(executor.submit(action_handler, *args))
-					for future in concurrent.futures.as_completed(futures):
-						future.result()
-			if self.winning_player[game_index]:
-				winning_player_index = self.winning_player[game_index].index
-				self.step_type[:, game_index] = StepType.LAST
-				self.discount[:, game_index] = 0.
-				self.reward[:, game_index] = -1
-				self.reward[winning_player_index, game_index] = 1
 
-		return self.get_time_step()
+	def game_has_winner(self, game_index):
+		winning_player_index = self.winning_player[game_index].index
+		self.step_type[:, game_index] = StepType.LAST
+		self.discount[:, game_index] = 0.
+		self.reward[:, game_index] = -1
+		self.reward[winning_player_index, game_index] = 1
+
+	def process_game_actions(self, game_index, action_list):
+		with concurrent.futures.ThreadPoolExecutor(max_workers=self.worker_count) as executor:
+			futures = []
+			for player_index in range(player_count):
+				self.global_step.assign_add(1)
+				self.num_step[game_index] += 1
+				action = action_list[player_index][game_index]
+				action_handler, action_args = self.handler.action_lookup[action]
+				self.add_action_to_crash_log(game_index, player_index, action_handler, action_args)
+				args = action_args, self.player_list[player_index], game_index
+				futures.append(executor.submit(action_handler, *args))
+			for future in concurrent.futures.as_completed(futures):
+				future.result()
 
 	def _reset(self):
 		print("Resetting all games")
@@ -256,6 +259,32 @@ class PyTanFast(PyEnvironment, ABC):
 		for game_index in reset_games:
 			self.reset_game(game_index)
 		return self.get_time_step()
+
+	def complete_game(self, game_index):
+		self.write_episode_summary(game_index)
+		self.reset_game(game_index)
+		self.step_type[:, game_index] = StepType.FIRST
+		self.start_game(game_index)
+
+	def start_game(self, game_index):
+		for player in self.player_list:
+			player.dynamic_mask.only(df.no_action, game_index)
+
+		player_index_list = [x for x in range(player_count)]
+		player_order = random.sample(player_index_list, len(player_index_list))
+		self.player_order_build_phase[game_index] = [x for x in player_order]
+		player_order.reverse()
+		self.player_order_build_phase_reversed[game_index] = [x for x in player_order]
+		self.player_cycle[game_index] = cycle([x for x in player_order])
+		first_player_index = self.player_order_build_phase[game_index].pop(0)
+		first_player = self.player_list[first_player_index]
+		first_player.dynamic_mask.only(df.place_settlement, game_index)
+		first_player.current_player[game_index].fill(True)
+		self.current_player[game_index] = first_player
+		np.logical_and(
+			first_player.dynamic_mask.place_settlement[game_index],
+			self.state.vertex_open[game_index],
+			out=first_player.dynamic_mask.place_settlement[game_index])
 
 	def reset_game(self, game_index):
 		self.state.reset(game_index)
@@ -281,25 +310,6 @@ class PyTanFast(PyEnvironment, ABC):
 		for tile in self.board.tiles: tile.reset(game_index)
 		for vertex in self.board.vertices: vertex.reset(game_index)
 		for edge in self.board.edges: edge.reset(game_index)
-
-		for player in self.player_list:
-			player.dynamic_mask.only(df.no_action, game_index)
-
-		player_index_list = [x for x in range(player_count)]
-		player_order = random.sample(player_index_list, len(player_index_list))
-		self.player_order_build_phase[game_index] = [x for x in player_order]
-		player_order.reverse()
-		self.player_order_build_phase_reversed[game_index] = [x for x in player_order]
-		self.player_cycle[game_index] = cycle([x for x in player_order])
-		first_player_index = self.player_order_build_phase[game_index].pop(0)
-		first_player = self.player_list[first_player_index]
-		first_player.dynamic_mask.only(df.place_settlement, game_index)
-		first_player.current_player[game_index].fill(True)
-		self.current_player[game_index] = first_player
-		np.logical_and(
-			first_player.dynamic_mask.place_settlement[game_index],
-			self.state.vertex_open[game_index],
-			out=first_player.dynamic_mask.place_settlement[game_index])
 
 	def get_observation(self):
 		obs_list = [self.state.for_player(player_index) for player_index in range(player_count)]

@@ -55,7 +55,6 @@ class State:
 		self.extra_public_state = {}
 		for public_state_term in extra_public_state_degrees:
 			self.extra_public_state[public_state_term] = np.zeros((gs.player_count, combined_public_state_degrees[public_state_term]), dtype=np.int32)
-			# print(public_state_term)
 
 		self.game_state_len = sum([standard_game_state_degrees[term] for term in standard_game_state_degrees])
 		self.private_state_len = sum([private_state_degrees[term] for term in private_state_degrees])
@@ -75,8 +74,6 @@ class State:
 			next_index = current_index + standard_game_state_degrees[term]
 			self.game_state_slices[term] = self.state_slices[df.game_state][:, current_index:next_index]
 			current_index = next_index
-
-		# self.game_state_slices.update(self.extra_game_state)
 
 		self.game_state_slices[df.tile_resource].shape = (game_count, gs.tile_count, gs.resource_type_count_tile)
 		self.game_state_slices[df.tile_roll_number].shape = (game_count, gs.tile_count, gs.roll_number_count)
@@ -103,16 +100,6 @@ class State:
 		self.current_player_trade = self.game_state_slices[df.current_player_trade]
 		self.current_roll = self.game_state_slices[df.current_roll]
 		self.vertex_has_port = self.game_state_slices[df.vertex_has_port]
-		# self.current_player_index = self.game_state_slices[df.current_player_index]
-		# self.must_move_robber_index = self.game_state_slices[df.must_move_robber_index]
-		# self.owns_largest_army_index = self.game_state_slices[df.owns_largest_army_index]
-		# self.owns_longest_road_index = self.game_state_slices[df.owns_longest_road_index]
-		# self.offering_trade_index = self.game_state_slices[df.offering_trade_index]
-		# self.tile_has_robber_index = self.game_state_slices[df.tile_has_robber_index]
-		# self.tile_resource_index = self.game_state_slices[df.tile_resource_index]
-		# self.tile_roll_number_index = self.game_state_slices[df.tile_roll_number_index]
-		# self.current_roll_index = self.game_state_slices[df.current_roll_index]
-		# self.port_resource_index = self.game_state_slices[df.port_resource_index]
 
 		self.private_state_slices = []
 		for player_index in gs.player_list:
@@ -131,10 +118,9 @@ class State:
 				next_index = current_index + standard_public_state_degrees[term]
 				public_state_slice[term] = self.state_slices[df.public_state][:, player_index, current_index:next_index]
 				current_index = next_index
-			# for term in extra_public_state_degrees:
-			# 	public_state_slice[term] = self.extra_public_state[term][:, player_index, :]
 
 			self.public_state_slices.append(public_state_slice)
+		# self.observation_array = np.array(self.state_slices[df.public_state], dtype=np.int32)
 
 	def for_player(self, player_index):
 		observation_order = [i for i in gs.player_list]
@@ -147,37 +133,3 @@ class State:
 
 	def reset(self, game_index):
 		self.state[game_index].fill(0)
-		# for term in self.extra_public_state:
-		# 	self.extra_public_state[term].fill(0)
-		# for term in self.extra_game_state:
-		# 	self.extra_game_state[term].fill(0)
-		# if self.condensed_state:
-		# 	self.game_state_slices[df.current_player_index].fill(-1)
-		# 	self.game_state_slices[df.must_move_robber_index].fill(-1)
-		# 	self.game_state_slices[df.owns_largest_army_index].fill(-1)
-		# 	self.game_state_slices[df.owns_longest_road_index].fill(-1)
-		# 	self.game_state_slices[df.offering_trade_index].fill(-1)
-		# 	self.game_state_slices[df.current_roll_index].fill(-1)
-		# 	self.game_state_slices[df.tile_has_robber_index].fill(-1)
-		# 	self.game_state_slices[df.tile_resource_index].fill(-1)
-		# 	self.game_state_slices[df.tile_roll_number_index].fill(-1)
-		# 	self.game_state_slices[df.port_resource_index].fill(-1)
-		# 	for player_index in gs.player_list:
-		# 		self.public_state_slices[player_index][df.settlement_indices].fill(-1)
-		# 		self.public_state_slices[player_index][df.road_indices].fill(-1)
-		# 		self.public_state_slices[player_index][df.city_indices].fill(-1)
-		# else:
-		# 	self.extra_game_state[df.current_player_index].fill(-1)
-		# 	self.extra_game_state[df.must_move_robber_index].fill(-1)
-		# 	self.extra_game_state[df.owns_largest_army_index].fill(-1)
-		# 	self.extra_game_state[df.owns_longest_road_index].fill(-1)
-		# 	self.extra_game_state[df.offering_trade_index].fill(-1)
-		# 	self.extra_game_state[df.current_roll_index].fill(-1)
-		# 	self.extra_game_state[df.tile_has_robber_index].fill(-1)
-		# 	self.extra_game_state[df.tile_resource_index].fill(-1)
-		# 	self.extra_game_state[df.tile_roll_number_index].fill(-1)
-		# 	self.extra_game_state[df.port_resource_index].fill(-1)
-		# 	for player_index in gs.player_list:
-		# 		self.public_state_slices[player_index][df.settlement_indices].fill(-1)
-		# 		self.public_state_slices[player_index][df.road_indices].fill(-1)
-		# 		self.public_state_slices[player_index][df.city_indices].fill(-1)

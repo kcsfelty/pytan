@@ -538,11 +538,6 @@ class Handler:
 			return
 		open_edge = open_edge[0]
 		open_edge_adjacent_edges = [x for x in open_edge.edges if x not in [leading_edge, opponent_edge, open_edge]]
-		# print(leading_edge)
-		# print(opponent_edge)
-		# print(opponent_edge_owner)
-		# print(open_edge)
-		# print(open_edge_adjacent_edges)
 		if not open_edge_adjacent_edges:
 			return
 		near_edge = False
