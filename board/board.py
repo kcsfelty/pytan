@@ -1,4 +1,4 @@
-import pytan_fast.settings as gs
+import reference.settings as gs
 from geometry.get_edge_edges import get_edge_edges
 from geometry.get_edge_list import get_edge_list
 from geometry.get_edge_tiles import get_edge_tiles
@@ -11,11 +11,11 @@ from geometry.get_vertex_edges import get_vertex_edges
 from geometry.get_vertex_list import get_vertex_list
 from geometry.get_vertex_tiles import get_vertex_tiles
 from geometry.get_vertex_vertices import get_vertex_vertices
-from pytan_fast import settings
-from pytan_fast.edge import Edge
-from pytan_fast.settings import desert_index
-from pytan_fast.tile import Tile
-from pytan_fast.vertex import Vertex
+from board.edge import Edge
+from board.tile import Tile
+from board.vertex import Vertex
+from reference import settings
+from reference.settings import desert_index
 from util.reverse_histogram import reverse_histogram
 
 

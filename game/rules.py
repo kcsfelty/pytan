@@ -1,5 +1,5 @@
 import numpy as np
-import pytan_fast.settings as gs
+import reference.settings as gs
 
 
 max_cards = np.array([19, 19, 19, 19, 19])

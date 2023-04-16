@@ -2,11 +2,11 @@ import random
 
 import numpy as np
 
-import pytan_fast.definitions as df
-import pytan_fast.settings as gs
-from pytan_fast.rules import Rules
+import reference.definitions as df
+import reference.settings as gs
+from game.rules import Rules
 
-from pytan_fast.trading import bank_trades, general_port_trades, resource_port_trades, player_trades, \
+from game.trading import bank_trades, general_port_trades, resource_port_trades, player_trades, \
 	discard_trades, year_of_plenty_trades, bank_trades_lookup, bank_trades_lookup_bank, general_port_trades_lookup, \
 	general_port_trades_lookup_bank, resource_port_trades_lookup, resource_port_trades_lookup_bank, \
 	player_trades_lookup, discard_trades_lookup
@@ -101,6 +101,7 @@ class Handler:
 			player.dynamic_mask.place_settlement[game_index] = False
 
 	def check_place_city(self, player, game_index):
+
 		if player.can_afford(gs.city_cost, game_index) and player.city_count[game_index] < gs.max_city_count:
 			player.dynamic_mask.place_city[game_index] = True
 			player.apply_static(df.place_city, game_index)
@@ -108,6 +109,12 @@ class Handler:
 			player.dynamic_mask.place_city[game_index] = False
 
 	def check_buy_development_card(self, player, game_index):
+		"""
+		Occurs:
+			never during build phase
+			after dice have been rolled
+			player is current player
+		"""
 		assert player is self.game.current_player[game_index], self.game.get_crash_log(player, game_index)
 		if player.can_afford(gs.development_card_cost, game_index) and len(self.game.development_card_stack[game_index]) > 0:
 			player.dynamic_mask.buy_development_card[game_index].fill(True)
@@ -116,6 +123,12 @@ class Handler:
 			player.dynamic_mask.buy_development_card[game_index].fill(False)
 
 	def check_player_play_development_card(self, player, game_index):
+		"""
+		Occurs:
+			never during build phase
+			after player begins turn
+			after player rolls dice if cards played doesn't exceed limit
+		"""
 		if self.game.state.played_development_card_count[game_index] < gs.max_development_cards_played_per_turn:
 			if player.development_cards[game_index][gs.knight_index] > 0:
 				player.dynamic_mask.play_knight[game_index].fill(True)
@@ -135,6 +148,12 @@ class Handler:
 		return np.all(self.game.state.bank_resources[game_index] + np.expand_dims(np.sum(trade, axis=0) * -1, axis=0) >= 0, axis=0)
 
 	def set_post_roll_mask(self, player, game_index):
+		"""
+		Occurs:
+			never during build phase
+			player must be current player
+			dice must have been rolled
+		"""
 		assert self.rules.post_roll(player, game_index), self.game.get_crash_log(player, game_index)
 		player.dynamic_mask.only(df.end_turn, game_index)
 		self.check_bank_trades(player, game_index)
@@ -145,7 +164,11 @@ class Handler:
 		self.check_player_play_development_card(player, game_index)
 
 	def handle_end_turn(self, _, player, game_index):
-		# assert self.rules.end_turn(player, game_index), self.game.get_crash_log(player, game_index)
+		"""
+		Occurs:
+			build phase: after placing road
+			non-build phase: after rolling dice, building, card play or card buy might have occurred
+		"""
 		assert self.rules.current_player(player, game_index), self.game.get_crash_log(player, game_index)
 		if self.rules.build_phase(game_index):
 			assert self.rules.game.state.build_phase_placed_settlement[game_index], self.game.get_crash_log(player, game_index)
@@ -198,6 +221,11 @@ class Handler:
 			self.check_player_play_development_card(next_player, game_index)
 
 	def handle_roll_dice(self, roll, player, game_index):
+		"""
+		Occurs:
+			never during build phase
+			during pre-roll, a development card may have been played
+		"""
 		assert self.rules.pre_roll(player, game_index), self.game.get_crash_log(player, game_index)
 		roll = roll or self.game.dice.roll()
 		self.game.state.current_roll[game_index].fill(0)
@@ -209,6 +237,11 @@ class Handler:
 		self.set_post_roll_mask(player, game_index)
 
 	def handle_distribute_resources(self, roll, _, game_index):
+		"""
+		Occurs:
+			never during build phase
+			only after dice have been rolled and result was not robber_activated_roll
+		"""
 		trade = np.zeros((gs.player_count, gs.resource_type_count), dtype=np.int32)
 		for tile in self.game.board.roll_hash[game_index][roll]:
 			for vertex in tile.vertices:
@@ -225,6 +258,11 @@ class Handler:
 			self.handle_bank_trade(trade[disburse_player.index], disburse_player, game_index)
 
 	def handle_robber_roll(self, player, game_index):
+		"""
+		Occurs:
+			never during build phase
+			only after dice have been rolled and result was robber_activated_roll
+		"""
 		some_player_discards = False
 		for robbed_player in self.game.player_list:
 			if robbed_player.resource_card_count[game_index] > gs.rob_player_above_card_count:
@@ -240,6 +278,12 @@ class Handler:
 			player.must_move_robber[game_index] = True
 
 	def handle_player_trade(self, player_from, player_to, trade, game_index):
+		"""
+		Occurs:
+			never during build phase
+			player trading
+			robber theft
+		"""
 		assert self.rules.current_player(player_from, game_index), self.game.get_crash_log(player_from, game_index)
 		assert not self.rules.current_player(player_to, game_index), self.game.get_crash_log(player_to, game_index)
 		self.game.crash_log[game_index].append("player_trade" + str(player_from) + str(player_to) + str(trade))
@@ -256,6 +300,15 @@ class Handler:
 				self.check_player_play_development_card(self.game.current_player[game_index], game_index)
 
 	def handle_bank_trade(self, trade, player, game_index):
+		"""
+		Occurs:
+			resource disbursement from roll
+			discard following robber roll
+			bank trade
+			general port trade
+			specific port trade
+			reverse build phase resource distribution
+		"""
 		self.game.crash_log[game_index].append("bank_trade" + str(player) + str(trade))
 		player.resource_cards[game_index] += trade
 		self.game.state.bank_resources[game_index] -= trade
@@ -271,6 +324,10 @@ class Handler:
 			self.check_player_play_development_card(player, game_index)
 
 	def handle_offer_player_trade(self, trade, player, game_index):
+		"""
+		Occurs:
+			post-roll
+		"""
 		assert self.rules.post_roll(player, game_index), self.game.get_crash_log(player, game_index)
 		self.game.player_trades_this_turn[game_index] += 1
 		player.dynamic_mask.only(df.no_action, game_index)
@@ -283,6 +340,10 @@ class Handler:
 		self.game.trading_player[game_index] = player
 
 	def handle_accept_player_trade(self, _, player, game_index):
+		"""
+		Occurs:
+			after a trade offer was made, player must be able to afford
+		"""
 		assert self.rules.accept_player_trade(player, game_index), self.game.get_crash_log(player, game_index)
 		player.accepted_trade[game_index].fill(True)
 		player.dynamic_mask.only(df.no_action, game_index)
@@ -290,6 +351,10 @@ class Handler:
 		self.check_trade_responses(game_index)
 
 	def handle_decline_player_trade(self, _, player, game_index):
+		"""
+		Occurs:
+			after a trade offer was made, player may or may not be able to afford
+		"""
 		assert self.rules.decline_player_trade(player, game_index), self.game.get_crash_log(player, game_index)
 		player.declined_trade[game_index].fill(1)
 		player.dynamic_mask.only(df.no_action, game_index)
@@ -306,6 +371,10 @@ class Handler:
 			self.game.trading_player[game_index].apply_static(df.confirm_player_trade, game_index)
 
 	def handle_cancel_player_trade(self, _, player, game_index):
+		"""
+		Occurs:
+			after all opponents have responded to the standing trade offer
+		"""
 		assert self.rules.cancel_player_trade(player, game_index), self.game.get_crash_log(player, game_index)
 		player.static_mask.confirm_player_trade[game_index].fill(0)
 		self.game.trading_player[game_index] = None
@@ -318,6 +387,10 @@ class Handler:
 		self.set_post_roll_mask(player, game_index)
 
 	def handle_confirm_player_trade(self, trade_player, player, game_index):
+		"""
+		Occurs:
+			after all opponents have responded to the current trade offer and at least one accepted
+		"""
 		assert self.rules.confirm_player_trade(trade_player, player, game_index)
 		self.handle_player_trade(player, trade_player, self.game.state.current_player_trade[game_index], game_index)
 		trade_player.player_trade_total += self.game.state.current_player_trade[game_index]
@@ -325,6 +398,12 @@ class Handler:
 		self.handle_cancel_player_trade(None, player, game_index)
 
 	def handle_move_robber(self, tile, player, game_index):
+		"""
+		Occurs:
+			after robber roll if no discarding
+			after all players finish discarding after robber roll
+			after knight card played
+		"""
 		assert player.current_player[game_index], self.game.get_crash_log(player, game_index)
 		assert self.game.board.robbed_tile[game_index] is not tile, self.game.get_crash_log(player, game_index)
 		assert player.must_move_robber[game_index], self.game.get_crash_log(player, game_index)
@@ -352,6 +431,12 @@ class Handler:
 				self.check_player_play_development_card(player, game_index)
 
 	def handle_rob_player(self, rob_player, player, game_index):
+		"""
+		Occurs:
+			after a move_robber to a tile with at least one opponent
+		"""
+		assert self.rules.current_player(player, game_index), self.game.get_crash_log(player, game_index)
+		assert not self.rules.current_player(rob_player, game_index), self.game.get_crash_log(rob_player, game_index)
 		assert self.rules.player_can_be_robbed(rob_player, game_index), self.game.get_crash_log(player, game_index)
 		rob_player_deck = reverse_histogram(rob_player.resource_cards[game_index])
 		random.shuffle(rob_player_deck)

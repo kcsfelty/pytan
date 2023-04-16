@@ -1,38 +1,19 @@
 import numpy as np
-import pytan_fast.settings as gs
-import pytan_fast.definitions as df
-from pytan_fast.states.game_state import game_state_degrees, game_state_degrees_condensed
-from pytan_fast.states.private_state import private_state_degrees
-from pytan_fast.states.public_state import public_state_degrees, public_state_degrees_condensed
+import reference.settings as gs
+import reference.definitions as df
+from reference.game_state import game_state_degrees
+from reference.private_state import private_state_degrees
+from reference.public_state import public_state_degrees
 
 
 class State:
-	def __init__(self, game_count=1, player_count=3, condensed_state=False):
+	def __init__(self, game_count=1):
 		self.game_count = game_count
-		self.condensed_state = condensed_state
 
-		if self.condensed_state:
-			standard_game_state_degrees = game_state_degrees_condensed
-			extended_game_state_degrees = game_state_degrees
-			standard_public_state_degrees = public_state_degrees_condensed
-			extended_public_state_degrees = public_state_degrees
-		else:
-			standard_game_state_degrees = game_state_degrees
-			extended_game_state_degrees = game_state_degrees_condensed
-			standard_public_state_degrees = public_state_degrees
-			extended_public_state_degrees = public_state_degrees_condensed
-
-		# combined_game_state_degrees = standard_game_state_degrees | extended_game_state_degrees
-		# extra_game_state_degrees = extended_game_state_degrees.keys() - standard_game_state_degrees.keys()
-		combined_public_state_degrees = standard_public_state_degrees | extended_public_state_degrees
-		extra_public_state_degrees = extended_public_state_degrees.keys() - standard_public_state_degrees.keys()
-
-		# print(standard_game_state_degrees)
-		# print(standard_public_state_degrees)
 		self.observation_terms = []
-		for term in standard_game_state_degrees:
-			if standard_game_state_degrees[term] > 1:
-				self.observation_terms.extend([term + "_" + str(i) for i in range(standard_game_state_degrees[term])])
+		for term in game_state_degrees:
+			if game_state_degrees[term] > 1:
+				self.observation_terms.extend([term + "_" + str(i) for i in range(game_state_degrees[term])])
 			else:
 				self.observation_terms.append(term)
 		for term in private_state_degrees:
@@ -40,25 +21,15 @@ class State:
 				self.observation_terms.extend([term + "_" + str(i) for i in range(private_state_degrees[term])])
 			else:
 				self.observation_terms.append(term)
-		for term in standard_public_state_degrees:
-			if standard_public_state_degrees[term] > 1:
-				self.observation_terms.extend([term + "_" + str(i) for i in range(standard_public_state_degrees[term])])
+		for term in public_state_degrees:
+			if public_state_degrees[term] > 1:
+				self.observation_terms.extend([term + "_" + str(i) for i in range(public_state_degrees[term])])
 			else:
 				self.observation_terms.append(term)
-		# for term in self.observation_terms:
-			# print(term)
-		# self.extra_game_state = {}
-		# for game_state_term in extra_game_state_degrees:
-		# 	self.extra_game_state[game_state_term] = np.zeros(combined_game_state_degrees[game_state_term])
-			# print(game_state_term)
-		# print()
-		self.extra_public_state = {}
-		for public_state_term in extra_public_state_degrees:
-			self.extra_public_state[public_state_term] = np.zeros((gs.player_count, combined_public_state_degrees[public_state_term]), dtype=np.int32)
 
-		self.game_state_len = sum([standard_game_state_degrees[term] for term in standard_game_state_degrees])
+		self.game_state_len = sum([game_state_degrees[term] for term in game_state_degrees])
 		self.private_state_len = sum([private_state_degrees[term] for term in private_state_degrees])
-		self.public_state_len = sum([standard_public_state_degrees[term] for term in standard_public_state_degrees])
+		self.public_state_len = sum([public_state_degrees[term] for term in public_state_degrees])
 		total_len = self.game_state_len + gs.player_count * (self.private_state_len + self.public_state_len)
 		self.state = np.zeros((game_count, total_len), dtype=np.int32)
 		self.state_slices = {}
@@ -70,8 +41,8 @@ class State:
 		self.state_slices[df.public_state].shape = (game_count, gs.player_count, self.public_state_len)
 		self.game_state_slices = {}
 		current_index = 0
-		for term in standard_game_state_degrees:
-			next_index = current_index + standard_game_state_degrees[term]
+		for term in game_state_degrees:
+			next_index = current_index + game_state_degrees[term]
 			self.game_state_slices[term] = self.state_slices[df.game_state][:, current_index:next_index]
 			current_index = next_index
 
@@ -114,13 +85,11 @@ class State:
 		for player_index in gs.player_list:
 			current_index = 0
 			public_state_slice = {}
-			for term in standard_public_state_degrees:
-				next_index = current_index + standard_public_state_degrees[term]
+			for term in public_state_degrees:
+				next_index = current_index + public_state_degrees[term]
 				public_state_slice[term] = self.state_slices[df.public_state][:, player_index, current_index:next_index]
 				current_index = next_index
-
 			self.public_state_slices.append(public_state_slice)
-		# self.observation_array = np.array(self.state_slices[df.public_state], dtype=np.int32)
 
 	def for_player(self, player_index):
 		observation_order = [i for i in gs.player_list]

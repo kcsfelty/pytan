@@ -3,74 +3,45 @@ import random
 import time
 from abc import ABC
 from itertools import cycle
-from typing import Tuple
 
 import numpy as np
 import tensorflow as tf
 from tf_agents.environments import PyEnvironment
-from tf_agents.specs import BoundedArraySpec, ArraySpec, BoundedTensorSpec, TensorSpec
 from tf_agents.trajectories import TimeStep, StepType
 from tf_agents.typing import types
 
-import pytan_fast.definitions as df
-from pytan_fast.board import Board
-from pytan_fast.handler import Handler
-from pytan_fast.player import Player
-from pytan_fast.settings import player_count, development_card_count_per_type, resource_card_count_per_type
-from pytan_fast.states.state import State
+import reference.definitions as df
+from board.board import Board
+from game.handler import Handler
+from game.player import Player
+from reference.settings import player_count, development_card_count_per_type, resource_card_count_per_type
+from reference.specs import reward_spec, action_spec, observation_spec, discount_spec, time_step_spec
+from reference.state import State
 from util.Dice import Dice
-
-rng = np.random.default_rng()
-
-action_count = 379
-observation_count = 1402
-
-broadcaster = np.ones(player_count, dtype=np.int32).reshape((player_count, 1))
-
-def reverse_histogram(hist):
-	hist = np.repeat([x for x in range(len(hist))], hist).tolist()
-	rng.shuffle(hist)
-	return hist
+from util.reverse_histogram import reverse_histogram
 
 
 class PyTanFast(PyEnvironment, ABC):
 	def __init__(self, game_count=1, global_step=None, worker_count=1, log_dir="./logs"):
 
-		super(PyTanFast, self).__init__(
-			handle_auto_reset=True
-		)
+		super(PyTanFast, self).__init__(handle_auto_reset=True)
 		self.game_count = game_count
+		self.global_step = global_step
+		self.worker_count = worker_count
 
 		# Summaries
 		self.log_dir = log_dir + "/game"
-		self.episode_number = 0
 		self.writer = tf.summary.create_file_writer(logdir=self.log_dir)
 
 		# Environment
+		self.state = State(self.game_count)
+		self.player_list = self.get_player_list()
+		self.board = Board(self.state, self)
+		self.handler = Handler(self)
+		self.dice = Dice()
 		self.step_type = np.ones((player_count, self.game_count), dtype=np.int32)
 		self.reward = np.zeros((player_count, self.game_count), dtype=np.float32)
 		self.discount = np.ones((player_count, self.game_count), dtype=np.float32)
-		self.global_step = global_step
-		self.state = State(self.game_count, player_count)
-		self.board = Board(self.state, self)
-		self.player_list = None
-		self.worker_count = worker_count
-
-		if not self.player_list:
-			self.player_list = [Player(
-				index=player_index,
-				game=self,
-				private_state=self.state.private_state_slices[player_index],
-				public_state=self.state.public_state_slices[player_index],
-			) for player_index in range(player_count)]
-
-			for player in self.player_list:
-				for other_player in self.player_list:
-					if player is not other_player:
-						player.other_players.append(other_player)
-
-		self.handler = Handler(self)
-		self.dice = Dice()
 
 		# Driver helpers
 		self.last_game_at_step = 0
@@ -78,62 +49,19 @@ class PyTanFast(PyEnvironment, ABC):
 		self.min_turns = np.inf
 		self.crash_log = [[]] * game_count
 		self.num_step = [0] * game_count
+
+		# Game logic helpers
 		self.player_cycle = [None] * game_count
 		self.player_order_build_phase = [[0, 1, 2] for _ in range(game_count)]
 		self.player_order_build_phase_reversed = [[2, 1, 0] for _ in range(game_count)]
 		self.current_player = [None] * game_count
 		self.winning_player = [None] * game_count
-
-		# Game logic helpers
 		self.development_card_stack = [[] for _ in range(game_count)]
 		self.trading_player = [None] * game_count
 		self.longest_road_owner = [None] * game_count
 		self.largest_army_owner = [None] * game_count
 		self.player_trades_this_turn = [0] * game_count
 		self.resolve_road_building_count = [0] * game_count
-
-		self._action_spec = (BoundedArraySpec(
-			shape=(game_count,),
-			dtype=np.int32,
-			minimum=0,
-			maximum=action_count - 1,
-			name='action'),) * player_count
-
-		self._discount_spec = BoundedArraySpec(
-			shape=(game_count,),
-			dtype=np.float32,
-			minimum=0.,
-			maximum=1.,
-			name='discount')
-		self._observation_spec = (
-			BoundedArraySpec(
-				shape=(game_count, observation_count,),
-				dtype=np.int32,
-				minimum=0,
-				maximum=127,
-				name='observation'),
-			BoundedArraySpec(
-				shape=(game_count, action_count,),
-				dtype=np.int32,
-				minimum=0,
-				maximum=1,
-				name='action_mask'))
-		self._reward_spec = BoundedArraySpec(
-			shape=(game_count,),
-			dtype=np.float32,
-			minimum=-1.,
-			maximum=1.,
-			name='reward')
-		self._step_type_spec = ArraySpec(
-			shape=(game_count,),
-			dtype=np.int32,
-			name='step_type')
-		self._time_step_spec = TimeStep(
-			step_type=self._step_type_spec,
-			reward=self._reward_spec,
-			discount=self._discount_spec,
-			observation=self._observation_spec
-		) * player_count
 
 	@property
 	def batched(self) -> bool:
@@ -144,22 +72,37 @@ class PyTanFast(PyEnvironment, ABC):
 		return self.game_count * player_count
 
 	def reward_spec(self) -> types.NestedArraySpec:
-		return self._reward_spec
+		return reward_spec
 
 	def action_spec(self) -> types.NestedArraySpec:
-		return self._action_spec
+		return action_spec
 
 	def observation_spec(self) -> types.NestedArraySpec:
-		return self._observation_spec
+		return observation_spec
 
 	def discount_spec(self) -> types.NestedArraySpec:
-		return self._discount_spec
+		return discount_spec
 
 	def time_step_spec(self) -> TimeStep:
-		return self._time_step_spec
+		return (time_step_spec,) * player_count
 
 	def should_reset(self, current_time_step) -> bool:
 		return False
+
+	def get_player_list(self):
+		player_list = [Player(
+			index=player_index,
+			game=self,
+			private_state=self.state.private_state_slices[player_index],
+			public_state=self.state.public_state_slices[player_index],
+		) for player_index in range(player_count)]
+
+		for player in player_list:
+			for other_player in player_list:
+				if player is not other_player:
+					player.other_players.append(other_player)
+
+		return player_list
 
 	def write_episode_summary(self, game_index):
 		turn = self.state.turn_number[game_index].item()
@@ -185,24 +128,11 @@ class PyTanFast(PyEnvironment, ABC):
 
 		if turn < self.min_turns:
 			if turn < 20:
-				print(self.get_crash_log(None, game_index, add_state=False))
+				print("\n".join(self.crash_log[game_index]))
 
-	def add_state_to_crash_log(self, player, game_index):
-		pass
-		# for term in self.state.game_state_slices:
-		# 	term_str = str(term) + ", " + str(self.state.game_state_slices[term][game_index])
-		# 	self.crash_log[game_index].append(term_str)
-		# for term in player.public_state:
-		# 	term_str = str(term) + ", " + str(player.public_state[term][game_index])
-		# 	self.crash_log[game_index].append(term_str)
-		# for term in player.private_state:
-		# 	term_str = str(term) + ", " + str(player.private_state[term][game_index])
-		# 	self.crash_log[game_index].append(term_str)
-
-	def get_crash_log(self, player, game_index, add_state=True):
-		if add_state:
-			self.add_state_to_crash_log(player or None, game_index)
-			self.crash_log[game_index].append(player.for_game(game_index))
+	def get_crash_log(self, player, game_index):
+		player_str = player.for_game(game_index) if player else ""
+		self.crash_log[game_index].append(player_str)
 		return "\n".join(self.crash_log[game_index])
 
 	def add_action_to_crash_log(self, game_index, player_index, action_handler, action_args):
@@ -236,8 +166,8 @@ class PyTanFast(PyEnvironment, ABC):
 		winning_player_index = self.winning_player[game_index].index
 		self.step_type[:, game_index] = StepType.LAST
 		self.discount[:, game_index] = 0.
-		self.reward[:, game_index] = -1
-		self.reward[winning_player_index, game_index] = 1
+		self.reward[:, game_index] -= 1
+		self.reward[winning_player_index, game_index] += 1
 
 	def process_game_actions(self, game_index, action_list):
 		with concurrent.futures.ThreadPoolExecutor(max_workers=self.worker_count) as executor:
@@ -258,6 +188,7 @@ class PyTanFast(PyEnvironment, ABC):
 		reset_games = [x for x in range(self.game_count)]
 		for game_index in reset_games:
 			self.reset_game(game_index)
+			self.start_game(game_index)
 		return self.get_time_step()
 
 	def complete_game(self, game_index):
@@ -310,12 +241,6 @@ class PyTanFast(PyEnvironment, ABC):
 		for tile in self.board.tiles: tile.reset(game_index)
 		for vertex in self.board.vertices: vertex.reset(game_index)
 		for edge in self.board.edges: edge.reset(game_index)
-
-	def get_observation(self):
-		obs_list = [self.state.for_player(player_index) for player_index in range(player_count)]
-		mask_list = [self.player_list[player_index].dynamic_mask.mask for player_index in range(player_count)]
-		observation = [(np.array(obs), np.array(mask)) for obs, mask in zip(obs_list, mask_list)]
-		return observation
 
 	def get_player_time_step(self, player_index):
 		obs = self.state.for_player(player_index)

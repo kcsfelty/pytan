@@ -2,7 +2,7 @@
 <project version="4">
   <component name="ProjectModuleManager">
     <modules>
-      <module fileurl="file://$PROJECT_DIR$/.idea/pytan_fast.iml" filepath="$PROJECT_DIR$/.idea/pytan_fast.iml" />
+      <module fileurl="file://$PROJECT_DIR$/../pytan/.idea/pytan.iml" filepath="$PROJECT_DIR$/../pytan/.idea/pytan.iml" />
     </modules>
   </component>
 </project>

@@ -1,5 +1,5 @@
-from pytan_fast.definitions import *
-import pytan_fast.settings as cs
+from reference.definitions import *
+import reference.settings as cs
 
 
 private_state_degrees = {

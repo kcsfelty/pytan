@@ -1,8 +1,8 @@
 import numpy as np
 
-import pytan_fast.definitions as df
-import pytan_fast.settings as gs
-from pytan_fast.mask import Mask
+import reference.definitions as df
+import reference.settings as gs
+from game.mask import Mask
 
 
 class Player:
@@ -117,6 +117,7 @@ class Player:
 
 	def change_victory_points(self, change, game_index):
 		self.victory_points[game_index] += change
+		# self.game.reward[self.index][game_index] += float(change)
 		self.check_victory(game_index)
 
 	def check_victory(self, game_index):
@@ -125,6 +126,7 @@ class Player:
 		if self.actual_victory_points[game_index] >= gs.victory_points_to_win:
 			self.development_cards_played[game_index][gs.victory_point_card_index] += self.development_cards[game_index][gs.victory_point_card_index]
 			self.victory_points[game_index] += victory_card_points
+			# self.game.reward[self.index][game_index] += float(victory_card_points)
 			self.game.winning_player[game_index] = self
 
 	def can_afford(self, trade, game_index):

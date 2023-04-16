@@ -1,5 +1,6 @@
-import pytan_fast.settings as gs
+import reference.settings as gs
 import numpy as np
+
 
 class Tile:
 	def __repr__(self):

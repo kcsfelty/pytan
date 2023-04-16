@@ -1,6 +1,6 @@
 import numpy as np
-import pytan_fast.definitions as df
-from pytan_fast.action_mapping import action_mapping
+import reference.definitions as df
+from reference.action_mapping import action_mapping
 
 
 class Mask:

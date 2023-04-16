@@ -1,6 +1,3 @@
-import pytan_fast.definitions as df
-
-
 class Edge:
 	def __repr__(self):
 		return "Edge{}".format(self.key)

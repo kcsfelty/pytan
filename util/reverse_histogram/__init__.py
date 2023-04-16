@@ -1,4 +1,6 @@
 import random
+import numpy as np
+rng = np.random.default_rng()
 
 
 def reverse_histogram(weight_list):

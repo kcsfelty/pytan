@@ -1,5 +1,5 @@
 import numpy as np
-import pytan_fast.settings as gs
+import reference.settings as gs
 
 def get_heterogeneous_trade_ratio_list(resource_list, maximum_ratio):
 	base_trades = []
