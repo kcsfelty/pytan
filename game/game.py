@@ -158,9 +158,9 @@ class PyTanFast(PyEnvironment, ABC):
 		return self.get_time_step()
 
 	def reset_time_step(self):
-		self.step_type = np.ones((player_count, self.game_count), dtype=np.int32)
-		self.reward = np.zeros((player_count, self.game_count), dtype=np.float32)
-		self.discount = np.ones((player_count, self.game_count), dtype=np.float32)
+		self.step_type.fill(1)
+		self.reward.fill(0)
+		self.discount.fill(1)
 
 	def game_has_winner(self, game_index):
 		winning_player_index = self.winning_player[game_index].index
