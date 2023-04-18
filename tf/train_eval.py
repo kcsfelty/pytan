@@ -22,12 +22,12 @@ def train_eval(
 		n_step_update=2 ** 10,
 
 		# Replay buffer
-		replay_buffer_size=2 ** 10,
+		replay_buffer_size=2 ** 12,
 		replay_batch_size=2 ** 4,
 
 		# Network parameters
 		learn_rate=1e-3,
-		fc_layer_params=(2 ** 9, 2 ** 9, 2 ** 9, 2 ** 8, 2 ** 8),
+		fc_layer_params=(2 ** 9, 2 ** 9, 2 ** 9, 2 ** 8, 2 ** 8, 2 ** 8),
 
 		# Greedy policy epsilon
 		epsilon_greedy_start=1.0,
