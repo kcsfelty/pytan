@@ -3,7 +3,7 @@ import numpy as np
 import reference.definitions as df
 import reference.settings as gs
 from game.mask import Mask
-
+import tensorflow as tf
 
 class Player:
 	def __repr__(self):
@@ -66,6 +66,7 @@ class Player:
 		# Diagnostics / Statistics
 		self.implicit_action_count = np.zeros((self.game.game_count,))
 		self.policy_action_count = np.zeros((self.game.game_count,))
+		self.writer = tf.summary.create_file_writer(logdir=self.game.log_dir + "/player{}".format(str(self.index)))
 
 		# Summaries
 		# Scalars
@@ -160,34 +161,29 @@ class Player:
 			paths.extend(paths_from_this_node)
 		self.longest_road[game_index] = len(max(paths, key=len))
 
-	def get_episode_summaries(self, game_index):
+	def write_episode_summary(self, game_index):
 		scalars = {
-			"victory_points": self.victory_points.item(),
-			"settlements": self.settlement_count.item(),
-			"cities": self.city_count.item(),
-			"roads": self.road_count.item(),
-			"distribution_avg": np.sum(self.distribution_total).item() / self.game.state.turn_number.item(),
-			"steal_avg": np.sum(self.steal_total).item() / self.game.state.turn_number.item(),
-			"stolen_avg": np.sum(self.stolen_total).item() / self.game.state.turn_number.item(),
-			"discard_avg": np.sum(self.discard_total).item() / self.game.state.turn_number.item(),
-			"bank_trade_total": np.sum(self.bank_trade_total).item(),
-			"player_trade_total": np.sum(self.player_trade_total).item(),
-			"implicit_action_ratio": self.policy_action_count / self.implicit_action_count,
-			"longest_road_per_road": self.longest_road / self.road_count.item(),
+			"victory_points": self.victory_points[game_index].item(),
+			"settlements": self.settlement_count[game_index].item(),
+			"cities": self.city_count[game_index].item(),
+			"roads": self.road_count[game_index].item(),
+			# "distribution_avg": np.sum(self.distribution_total).item() / self.game.state.turn_number.item(),
+			# "steal_avg": np.sum(self.steal_total).item() / self.game.state.turn_number.item(),
+			# "stolen_avg": np.sum(self.stolen_total).item() / self.game.state.turn_number.item(),
+			# "discard_avg": np.sum(self.discard_total).item() / self.game.state.turn_number.item(),
+			# "bank_trade_total": np.sum(self.bank_trade_total).item(),
+			# "player_trade_total": np.sum(self.player_trade_total).item(),
+			# "implicit_action_ratio": self.policy_action_count / self.implicit_action_count,
+			# "longest_road_per_road": self.longest_road[game_index] / self.road_count[game_index].item(),
 			"win_rate_50": self.win_rate(50),
 		}
-		if self.game.winning_player == self:
-			scalars["turn_count"] = self.game.state.turn_number.item()
-		histograms = {
-			# "action_count": self.action_count,
-		}
-		return {
-			"scalars": scalars,
-			"histograms": histograms
-		}
 
-	# def write_episode_summary(self):
-	# 	self.agent.writer(self.get_episode_summaries(), self.game.global_step)
+		if self.game.winning_player[game_index] == self:
+			scalars["turn_count"] = self.game.state.turn_number[game_index].item()
+
+		with self.writer.as_default(step=self.game.global_step):
+			for key in scalars:
+				tf.summary.scalar(name="turn_count", data=scalars[key])
 
 	def win_rate(self, n):
 		return self.avg_last_n(self.win_list, n)

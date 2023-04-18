@@ -30,8 +30,8 @@ class PyTanFast(PyEnvironment, ABC):
 		self.worker_count = worker_count
 
 		# Summaries
-		self.log_dir = log_dir + "/game"
-		self.writer = tf.summary.create_file_writer(logdir=self.log_dir)
+		self.log_dir = log_dir
+		self.writer = tf.summary.create_file_writer(logdir=self.log_dir + "/game")
 
 		# Environment
 		self.state = State(self.game_count)
@@ -125,6 +125,9 @@ class PyTanFast(PyEnvironment, ABC):
 
 		with self.writer.as_default(step=global_step):
 			tf.summary.scalar(name="turn_count", data=turn)
+
+		for player in self.player_list:
+			player.write_episode_summary(game_index)
 
 		if turn < self.min_turns:
 			if turn < 20:

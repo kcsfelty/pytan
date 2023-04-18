@@ -16,28 +16,28 @@ def train_eval(
 		thread_count=2 ** 5,
 
 		# Batching
-		game_count=2 ** 10,
-		total_steps=1e9,
-		initial_steps=2e6,
-		n_step_update=2 ** 9,
+		game_count=2 ** 9,
+		total_steps=5e8,
+		initial_steps=3e6,
+		n_step_update=2 ** 8,
 
 		# Replay buffer
-		replay_buffer_size=2 ** 12,
-		replay_batch_size=2 ** 2,
+		replay_buffer_size=2 ** 11,
+		replay_batch_size=2 ** 1,
 
 		# Network parameters
 		learn_rate=1e-3,
-		fc_layer_params=(2 ** 8, 2 ** 8, 2 ** 8, 2 ** 8),
+		fc_layer_params=(2 ** 8, 2 ** 7, 2 ** 6),
 
 		# Greedy policy epsilon
 		epsilon_greedy_start=1.0,
-		epsilon_greedy_end=0.2,
-		epsilon_greedy_half_life=5e6,
+		epsilon_greedy_end=0.05,
+		epsilon_greedy_half_life=10e6,
 
 		# Intervals
 		train_interval=2 ** 2,
 		eval_interval=2 ** 14,
-		log_interval=2 ** 8,
+		log_interval=2 ** 7,
 	):
 	global_step = tf.Variable(0, dtype=tf.int32)
 	epsilon_greedy_delta = tf.constant(epsilon_greedy_start - epsilon_greedy_end)
