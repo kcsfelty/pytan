@@ -5,6 +5,7 @@ import reference.settings as gs
 from game.mask import Mask
 import tensorflow as tf
 
+
 class Player:
 	def __repr__(self):
 		return "<Player{}>".format(self.index)
@@ -162,8 +163,7 @@ class Player:
 		self.longest_road[game_index] = len(max(paths, key=len))
 
 	def write_episode_summary(self, game_index):
-		if self.game.winning_player[game_index] == self:
-			self.win_list.append(1)
+		self.win_list.append(int(self.game.winning_player[game_index] == self))
 		scalars = {
 			"victory_points": self.victory_points[game_index].item(),
 			"settlements": self.settlement_count[game_index].item(),
@@ -177,14 +177,6 @@ class Player:
 			"year_of_plenty_played": self.development_cards_played[game_index][gs.year_of_plenty_index].item(),
 			"road_building_played": self.development_cards_played[game_index][gs.road_building_index].item(),
 			"victory_cards_played": self.development_cards_played[game_index][gs.victory_point_card_index].item(),
-			# "distribution_avg": np.sum(self.distribution_total).item() / self.game.state.turn_number.item(),
-			# "steal_avg": np.sum(self.steal_total).item() / self.game.state.turn_number.item(),
-			# "stolen_avg": np.sum(self.stolen_total).item() / self.game.state.turn_number.item(),
-			# "discard_avg": np.sum(self.discard_total).item() / self.game.state.turn_number.item(),
-			# "bank_trade_total": np.sum(self.bank_trade_total).item(),
-			# "player_trade_total": np.sum(self.player_trade_total).item(),
-			# "implicit_action_ratio": self.policy_action_count / self.implicit_action_count,
-			# "longest_road_per_road": self.longest_road[game_index] / self.road_count[game_index].item(),
 			"win_rate_50": self.win_rate(50),
 		}
 

@@ -17,17 +17,17 @@ def train_eval(
 
 		# Batching
 		game_count=2 ** 8,
-		total_steps=5e8,
-		initial_steps=10e6,
-		n_step_update=2 ** 10,
+		total_steps=250e6,
+		initial_steps=5e6,
+		n_step_update=2 ** 8,
 
 		# Replay buffer
 		replay_buffer_size=2 ** 12,
 		replay_batch_size=2 ** 4,
 
 		# Network parameters
-		learn_rate=1e-3,
-		fc_layer_params=(2 ** 9, 2 ** 9, 2 ** 9, 2 ** 8, 2 ** 8, 2 ** 8),
+		learn_rate=1e-4,
+		fc_layer_params=(2 ** 10, 2 ** 10, 2 ** 9, 2 ** 9, 2 ** 8, 2 ** 8),
 
 		# Greedy policy epsilon
 		epsilon_greedy_start=1.0,
@@ -56,7 +56,7 @@ def train_eval(
 		log_str += "[iteration: {}] ".format(str(iteration).rjust(5))
 		log_str += "[pct: {}%] ".format(str(int(step / total_steps * 100)))
 		log_str += "[rate: {} step/sec] ".format(str(int(rate)).rjust(5))
-		log_str += "[epsilon: {}] ".format(str(epsilon_greedy().numpy().item())[:6])
+		log_str += "[epsilon: {}] ".format(str(epsilon_greedy().numpy().item())[:7])
 		print(log_str)
 
 	def get_rate():
