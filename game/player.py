@@ -167,6 +167,14 @@ class Player:
 			"settlements": self.settlement_count[game_index].item(),
 			"cities": self.city_count[game_index].item(),
 			"roads": self.road_count[game_index].item(),
+			"longest_road": self.longest_road[game_index].item(),
+			"owns_longest_road": self.owns_longest_road[game_index].item(),
+			"owns_largest_army": self.owns_largest_army[game_index].item(),
+			"knights_played": self.development_cards_played[game_index][gs.knight_index].item(),
+			"monopoly_played": self.development_cards_played[game_index][gs.monopoly_index].item(),
+			"year_of_plenty_played": self.development_cards_played[game_index][gs.year_of_plenty_index].item(),
+			"road_building_played": self.development_cards_played[game_index][gs.road_building_index].item(),
+			"victory_cards_played": self.development_cards_played[game_index][gs.victory_point_card_index].item(),
 			# "distribution_avg": np.sum(self.distribution_total).item() / self.game.state.turn_number.item(),
 			# "steal_avg": np.sum(self.steal_total).item() / self.game.state.turn_number.item(),
 			# "stolen_avg": np.sum(self.stolen_total).item() / self.game.state.turn_number.item(),
@@ -181,9 +189,11 @@ class Player:
 		if self.game.winning_player[game_index] == self:
 			scalars["turn_count"] = self.game.state.turn_number[game_index].item()
 
-		with self.writer.as_default(step=self.game.global_step):
+		step = tf.cast(self.game.global_step, dtype=tf.int64)
+
+		with self.writer.as_default(step):
 			for key in scalars:
-				tf.summary.scalar(name="turn_count", data=scalars[key])
+				tf.summary.scalar(name=key, data=float(scalars[key]))
 
 	def win_rate(self, n):
 		return self.avg_last_n(self.win_list, n)
