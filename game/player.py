@@ -162,6 +162,8 @@ class Player:
 		self.longest_road[game_index] = len(max(paths, key=len))
 
 	def write_episode_summary(self, game_index):
+		if self.game.winning_player[game_index] == self:
+			self.win_list.append(1)
 		scalars = {
 			"victory_points": self.victory_points[game_index].item(),
 			"settlements": self.settlement_count[game_index].item(),
@@ -187,6 +189,7 @@ class Player:
 		}
 
 		if self.game.winning_player[game_index] == self:
+			self.win_list.append(1)
 			scalars["turn_count"] = self.game.state.turn_number[game_index].item()
 
 		step = tf.cast(self.game.global_step, dtype=tf.int64)
