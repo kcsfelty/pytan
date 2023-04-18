@@ -16,7 +16,7 @@ def train_eval(
 		thread_count=2 ** 5,
 
 		# Batching
-		game_count=2 ** 11,
+		game_count=2 ** 8,
 		total_steps=5e8,
 		initial_steps=10e6,
 		n_step_update=2 ** 10,
