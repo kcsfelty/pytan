@@ -168,7 +168,7 @@ class PyTanFast(PyEnvironment, ABC):
 	def game_has_winner(self, game_index):
 		winning_player_index = self.winning_player[game_index].index
 		self.step_type[:, game_index] = StepType.LAST
-		# self.discount[:, game_index] = 0.
+		self.discount[:, game_index] = 0.
 		self.reward[:, game_index] -= 1
 		self.reward[winning_player_index, game_index] += 1
 

@@ -23,7 +23,7 @@ def train_eval(
 
 		# Replay buffer
 		replay_buffer_size=2 ** 12,
-		replay_batch_size=2 ** 3,
+		replay_batch_size=2 ** 6,
 
 		# Network parameters
 		learn_rate=1e-4,
@@ -35,7 +35,7 @@ def train_eval(
 		epsilon_greedy_half_life=10e6,
 
 		# Intervals
-		train_interval=2 ** 3,
+		train_interval=2 ** 5,
 		eval_interval=2 ** 14,
 		log_interval=2 ** 7,
 	):
