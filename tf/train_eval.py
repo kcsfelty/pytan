@@ -18,12 +18,12 @@ def train_eval(
 		# Batching
 		game_count=2 ** 8,
 		total_steps=500e6,
-		initial_steps=1e6,
-		n_step_update=2 ** 7 - 2 ** 5,
+		initial_steps=3e6,
+		n_step_update=2 ** 9,
 
 		# Replay buffer
 		replay_buffer_size=2 ** 12,
-		replay_batch_size=2 ** 6,
+		replay_batch_size=2 ** 8,
 
 		# Network parameters
 		learn_rate=1e-4,
