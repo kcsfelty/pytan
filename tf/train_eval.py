@@ -27,7 +27,7 @@ def train_eval(
 
 		# Network parameters
 		learn_rate=1e-4,
-		fc_layer_params=(2 ** 10, 2 ** 10, 2 ** 9, 2 ** 9, 2 ** 8, 2 ** 8,),
+		fc_layer_params=(2 ** 10, 2 ** 9, 2 ** 8,),
 
 		# Greedy policy epsilon
 		epsilon_greedy_start=1.0,
