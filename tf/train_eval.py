@@ -18,8 +18,8 @@ def train_eval(
 		# Batching
 		game_count=2 ** 8,
 		total_steps=500e6,
-		initial_steps=3e6,
-		n_step_update=2 ** 7,
+		initial_steps=1e6,
+		n_step_update=2 ** 7 - 2 ** 5,
 
 		# Replay buffer
 		replay_buffer_size=2 ** 12,
@@ -27,7 +27,7 @@ def train_eval(
 
 		# Network parameters
 		learn_rate=1e-4,
-		fc_layer_params=(2 ** 10, 2 ** 9, 2 ** 8,),
+		fc_layer_params=(2 ** 10, 2 ** 8,),
 
 		# Greedy policy epsilon
 		epsilon_greedy_start=1.0,
