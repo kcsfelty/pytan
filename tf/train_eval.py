@@ -16,16 +16,17 @@ def train_eval(
 		thread_count=2 ** 5,
 
 		# Batching
-		game_count=2 ** 8,
+		game_count=2 ** 9,
 		n_step_update=2 ** 7,
 
 		# Replay buffer
 		replay_buffer_size=2 ** 12,
-		replay_batch_size=2 ** 6,
+		replay_batch_size=2 ** 5,
 
 		# Network parameters
 		learn_rate=1e-4,
-		fc_layer_params=(2 ** 8, 2 ** 6,),
+		fc_layer_params=(2 ** 7, 2 ** 5,),
+		gamma=0.999,
 
 		# Greedy policy epsilon
 		epsilon_greedy_start=0.30,
@@ -100,6 +101,7 @@ def train_eval(
 			n_step_update=n_step_update,
 			learn_rate=learn_rate,
 			epsilon_greedy=epsilon_greedy,
+			gamma=gamma,
 		) for index in range(player_count)]
 
 	last_time = time.perf_counter()

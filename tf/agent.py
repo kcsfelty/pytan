@@ -18,6 +18,7 @@ class Agent:
 			learn_rate=0.0001,
 			fc_layer_params=(2 ** 6, 2 ** 6, 2 ** 6,),
 			epsilon_greedy=0.1,
+			gamma=1.,
 			game_count=1,
 			replay_batch_size=250,
 			log_dir="./logs"
@@ -46,7 +47,7 @@ class Agent:
 			train_step_counter=self.train_counter,
 			target_update_tau=1.0,
 			target_update_period=1,
-			gamma=1.0,
+			gamma=gamma,
 			summarize_grads_and_vars=True)
 
 		self.train_fn = common.function(self.agent.train)
