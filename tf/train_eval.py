@@ -24,18 +24,18 @@ def train_eval(
 		replay_batch_size=2 ** 6,
 
 		# Network parameters
-		learn_rate=1e-4,
-		fc_layer_params=(2 ** 8, 2 ** 8, 2 ** 8, 2 ** 8,),
+		learn_rate=1e-3,
+		fc_layer_params=(2 ** 6, 2 ** 5,),
 		gamma=0.993,
 
 		# Greedy policy epsilon
-		epsilon_greedy_start=0.50,
+		epsilon_greedy_start=1.00,
 		epsilon_greedy_end=0.01,
 		epsilon_greedy_half_life=10e6,
 
 		# Intervals
 		total_steps=500e6,
-		initial_steps=5e6,
+		initial_steps=3e6,
 		train_interval=2 ** 5,
 		eval_interval=2 ** 14,
 		log_interval=2 ** 7,
