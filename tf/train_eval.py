@@ -16,26 +16,26 @@ def train_eval(
 		thread_count=2 ** 5,
 
 		# Batching
-		game_count=2 ** 9,
-		n_step_update=2 ** 7,
+		game_count=2 ** 8,
+		n_step_update=2 ** 8,
 
 		# Replay buffer
 		replay_buffer_size=2 ** 12,
-		replay_batch_size=2 ** 5,
+		replay_batch_size=2 ** 6,
 
 		# Network parameters
 		learn_rate=1e-4,
-		fc_layer_params=(2 ** 7, 2 ** 5,),
-		gamma=0.999,
+		fc_layer_params=(2 ** 8, 2 ** 8, 2 ** 8, 2 ** 8,),
+		gamma=0.993,
 
 		# Greedy policy epsilon
-		epsilon_greedy_start=0.30,
+		epsilon_greedy_start=0.50,
 		epsilon_greedy_end=0.01,
 		epsilon_greedy_half_life=10e6,
 
 		# Intervals
 		total_steps=500e6,
-		initial_steps=3e6,
+		initial_steps=5e6,
 		train_interval=2 ** 5,
 		eval_interval=2 ** 14,
 		log_interval=2 ** 7,
