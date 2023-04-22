@@ -9,6 +9,12 @@ from tf.agent import Agent
 from game.game import PyTanFast
 from reference.settings import player_count
 
+goal_episode_steps = 1200
+goal_player_steps = goal_episode_steps / player_count
+oldest_n_step_discount_factor = 3
+half_life_steps = goal_player_steps / oldest_n_step_discount_factor
+n_step_gamma = 1 - math.log(2) / half_life_steps
+
 
 def train_eval(
 		# Performance
@@ -16,17 +22,17 @@ def train_eval(
 		thread_count=2 ** 5,
 
 		# Batching
-		game_count=2 ** 8,
-		n_step_update=2 ** 8,
+		game_count=2 ** 9,
+		n_step_update=goal_player_steps,
 
 		# Replay buffer
-		replay_buffer_size=2 ** 12,
-		replay_batch_size=2 ** 8,
+		replay_buffer_size=goal_player_steps * 2,
+		replay_batch_size=2 ** 7,
 
 		# Network parameters
 		learn_rate=1e-4,
-		fc_layer_params=(2 ** 5, 2 ** 5,),
-		gamma=0.99,
+		fc_layer_params=(2 ** 6, 2 ** 5,),
+		gamma=n_step_gamma,
 
 		# Greedy policy epsilon
 		epsilon_greedy_start=1.00,
@@ -36,7 +42,7 @@ def train_eval(
 		# Intervals
 		total_steps=500e6,
 		initial_steps=4e6,
-		train_interval=2 ** 5,
+		train_interval=2 ** 7,
 		eval_interval=2 ** 14,
 		log_interval=2 ** 7,
 	):
@@ -112,7 +118,8 @@ def train_eval(
 	agent_list = get_agent_list()
 	time_step = env.current_time_step()
 
-	while global_step.numpy() < initial_steps:
+	# while global_step.numpy() < initial_steps:
+	for _ in range(replay_buffer_size + 1):
 		action = act(time_step)
 		time_step = env.step(action)
 		if iteration % log_interval == 0:
