@@ -19,20 +19,6 @@ def train_eval(
 		# Batching
 		game_count=2 ** 8,
 		total_steps=250e6,
-		initial_steps=5e6,
-		n_step_update=2 ** 8,
-
-		# Replay buffer
-		replay_buffer_size=2 ** 12,
-		replay_batch_size=2 ** 4,
-
-		# Network parameters
-		learn_rate=1e-4,
-		fc_layer_params=(2 ** 10, 2 ** 10, 2 ** 9, 2 ** 9, 2 ** 8, 2 ** 8),
-
-		# Intervals
-		train_interval=2 ** 4,
-		eval_interval=2 ** 14,
 		log_interval=2 ** 7,
 	):
 	global_step = tf.Variable(0, dtype=tf.int32)
@@ -92,7 +78,7 @@ def train_eval(
 	policy_list = get_policy_list()
 	time_step = env.current_time_step()
 
-	while global_step.numpy() < initial_steps:
+	while global_step.numpy() < total_steps:
 		action = act(time_step)
 		time_step = env.step(action)
 		if iteration % log_interval == 0:

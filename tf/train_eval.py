@@ -21,12 +21,12 @@ def train_eval(
 
 		# Replay buffer
 		replay_buffer_size=2 ** 12,
-		replay_batch_size=2 ** 6,
+		replay_batch_size=2 ** 8,
 
 		# Network parameters
-		learn_rate=1e-3,
-		fc_layer_params=(2 ** 6, 2 ** 5,),
-		gamma=0.993,
+		learn_rate=1e-4,
+		fc_layer_params=(2 ** 5, 2 ** 5,),
+		gamma=0.99,
 
 		# Greedy policy epsilon
 		epsilon_greedy_start=1.00,
@@ -35,7 +35,7 @@ def train_eval(
 
 		# Intervals
 		total_steps=500e6,
-		initial_steps=3e6,
+		initial_steps=4e6,
 		train_interval=2 ** 5,
 		eval_interval=2 ** 14,
 		log_interval=2 ** 7,
