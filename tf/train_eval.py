@@ -10,24 +10,26 @@ from game.game import PyTanFast
 from reference.settings import player_count
 
 goal_episode_steps = 1200
-goal_player_steps = goal_episode_steps / player_count
+goal_player_steps = goal_episode_steps // player_count
 oldest_n_step_discount_factor = 3
 half_life_steps = goal_player_steps / oldest_n_step_discount_factor
 n_step_gamma = 1 - math.log(2) / half_life_steps
 
 
 def train_eval(
-		# Performance
+		# Performance / Logging
+		log_dir="./logs",
 		process_count=None,
 		thread_count=2 ** 5,
 
 		# Batching
-		game_count=2 ** 9,
+		game_count=2 ** 10,
+		eval_game_count=2**4,
 		n_step_update=goal_player_steps,
 
 		# Replay buffer
-		replay_buffer_size=goal_player_steps * 2,
-		replay_batch_size=2 ** 7,
+		replay_buffer_size=goal_player_steps,
+		replay_batch_size=2 ** 3,
 
 		# Network parameters
 		learn_rate=1e-4,
@@ -41,12 +43,13 @@ def train_eval(
 
 		# Intervals
 		total_steps=500e6,
-		initial_steps=4e6,
-		train_interval=2 ** 7,
+		eval_steps=50000,
+		train_interval=2 ** 3,
 		eval_interval=2 ** 14,
 		log_interval=2 ** 7,
 	):
 	global_step = tf.Variable(0, dtype=tf.int32)
+	eval_global_step = tf.Variable(0, dtype=tf.int32)
 	epsilon_greedy_delta = tf.constant(epsilon_greedy_start - epsilon_greedy_end)
 	epsilon_greedy_base = tf.constant(1 - math.log(2) / epsilon_greedy_half_life)
 
@@ -80,26 +83,58 @@ def train_eval(
 			action_list.append(agent_.action.action)
 		return tf.convert_to_tensor(action_list, dtype=tf.int32)
 
-	def get_env():
+	def run_eval():
+		eval_last_time = time.perf_counter()
+		eval_last_step = global_step.numpy().item()
+		eval_iteration = 0
+		eval_time_step = eval_env.reset()
+		while eval_global_step.numpy() < eval_steps:
+			eval_action_list = []
+			for agent_, time_step_ in zip(agent_list, eval_time_step):
+				eval_action_list.append(agent_.agent.policy.action(time_step_))
+			eval_action = tf.convert_to_tensor(eval_action_list, dtype=tf.int32)
+			eval_time_step = train_env.step(eval_action)
+			if iteration % log_interval == 0:
+				eval_step = eval_global_step.numpy().item()
+				eval_step_delta = eval_step - eval_last_step
+				eval_time_delta = time.perf_counter() - eval_last_time
+				eval_rate = eval_step_delta / eval_time_delta
+				eval_last_time = time.perf_counter()
+				eval_last_step = eval_step
+				log_str = ""
+				log_str += "[global: {}] ".format(str(eval_step).rjust(10))
+				log_str += "[iteration: {}] ".format(str(eval_iteration).rjust(5))
+				log_str += "[pct: {}%] ".format(str(int(eval_step / eval_steps * 100)))
+				log_str += "[rate: {} step/sec] ".format(str(int(eval_rate)).rjust(5))
+				print(log_str)
+
+	def get_env(as_eval_env=False):
+		game_count_ = game_count if not as_eval_env else eval_game_count,
+		global_step_ = global_step if not as_eval_env else eval_global_step,
+		log_dir_ = log_dir if not eval_env else log_dir + "/eval"
 		if process_count:
 			class ParallelPyTan(PyTanFast, ABC):
 				def __init__(self):
 					super().__init__(
-						game_count=game_count,
-						global_step=global_step,
-						worker_count=thread_count)
+						game_count=game_count_,
+						global_step=global_step_,
+						worker_count=thread_count,
+						log_dir=log_dir_)
 			env_list = [ParallelPyTan] * process_count
 			py_env = ParallelPyEnvironment(env_list)
 		else:
-			py_env = PyTanFast(game_count, global_step)
+			py_env = PyTanFast(
+				game_count_,
+				global_step_,
+				log_dir=log_dir_)
 
 		return tf_py_environment.TFPyEnvironment(py_env)
 
 	def get_agent_list():
 		return [Agent(
 			index=index,
-			action_spec=env.action_spec(),
-			time_step_spec=env.time_step_spec(),
+			action_spec=train_env.action_spec(),
+			time_step_spec=train_env.time_step_spec(),
 			game_count=game_count,
 			replay_buffer_size=replay_buffer_size,
 			replay_batch_size=replay_batch_size,
@@ -114,14 +149,14 @@ def train_eval(
 	last_step = global_step.numpy().item()
 	iteration = 0
 
-	env = get_env()
+	train_env = get_env()
+	eval_env = get_env(as_eval_env=True)
 	agent_list = get_agent_list()
-	time_step = env.current_time_step()
+	time_step = train_env.current_time_step()
 
-	# while global_step.numpy() < initial_steps:
-	for _ in range(replay_buffer_size + 1):
+	for _ in range(replay_buffer_size):
 		action = act(time_step)
-		time_step = env.step(action)
+		time_step = train_env.step(action)
 		if iteration % log_interval == 0:
 			last_step, last_time, rate = get_rate()
 			log()
@@ -131,12 +166,12 @@ def train_eval(
 
 	while global_step.numpy() < total_steps:
 		action = act(time_step)
-		time_step = env.step(action)
+		time_step = train_env.step(action)
 		if iteration % train_interval == 0:
 			for agent in agent_list:
 				agent.train()
 		if iteration % eval_interval == 0:
-			pass
+			run_eval()
 		if iteration % log_interval == 0:
 			last_step, last_time, rate = get_rate()
 			log()
