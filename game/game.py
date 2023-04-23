@@ -22,12 +22,13 @@ from util.reverse_histogram import reverse_histogram
 
 
 class PyTanFast(PyEnvironment, ABC):
-	def __init__(self, game_count=1, global_step=None, worker_count=1, log_dir="./logs"):
+	def __init__(self, game_count=1, global_step=None, worker_count=1, log_dir="./logs", env_id=""):
 
 		super(PyTanFast, self).__init__(handle_auto_reset=True)
 		self.game_count = game_count
 		self.global_step = global_step
 		self.worker_count = worker_count
+		self.env_id = env_id
 
 		# Summaries
 		self.log_dir = log_dir
@@ -105,33 +106,36 @@ class PyTanFast(PyEnvironment, ABC):
 		return player_list
 
 	def write_episode_summary(self, game_index):
-		turn = self.state.turn_number[game_index].item()
-		step = self.num_step[game_index]
-		global_step = self.global_step.numpy().item()
-		time_delta = time.perf_counter() - self.last_game_at_time
-		self.last_game_at_time = time.perf_counter()
-		step_delta = global_step - self.last_game_at_step
-		self.last_game_at_step = int(global_step)
-		rate = int(step_delta / time_delta)
-		summary = ""
-		summary += "[env:{}] ".format(str(game_index).rjust(5))
-		summary += "[turns:{}] ".format(str(turn).rjust(5))
-		summary += "[steps:{}] ".format(str(step).rjust(6))
-		summary += "[global:{}]   ".format(str(global_step).rjust(10))
-		summary += "[rate:{}]   ".format(str(rate).rjust(6))
-		if self.winning_player[game_index]:
-			summary += str(self.winning_player[game_index].for_game(game_index))
-		print(summary)
+		if self.global_step:
+			turn = self.state.turn_number[game_index].item()
+			step = self.num_step[game_index]
+			global_step = self.global_step.numpy().item()
+			time_delta = time.perf_counter() - self.last_game_at_time
+			self.last_game_at_time = time.perf_counter()
+			step_delta = global_step - self.last_game_at_step
+			self.last_game_at_step = int(global_step)
+			rate = int(step_delta / time_delta)
+			summary = ""
+			if self.env_id:
+				summary += "[env: {}] ".format(str(self.env_id).rjust(5))
+			summary += "[game:{}] ".format(str(game_index).rjust(5))
+			summary += "[turns:{}] ".format(str(turn).rjust(5))
+			summary += "[steps:{}] ".format(str(step).rjust(6))
+			summary += "[global:{}]   ".format(str(global_step).rjust(10))
+			summary += "[rate:{}]   ".format(str(rate).rjust(6))
+			if self.winning_player[game_index]:
+				summary += str(self.winning_player[game_index].for_game(game_index))
+			print(summary)
 
-		with self.writer.as_default(step=global_step):
-			tf.summary.scalar(name="turn_count", data=turn)
+			with self.writer.as_default(step=global_step):
+				tf.summary.scalar(name="turn_count", data=turn)
 
-		for player in self.player_list:
-			player.write_episode_summary(game_index)
+			for player in self.player_list:
+				player.write_episode_summary(game_index)
 
-		if turn < self.min_turns:
-			if turn < 20:
-				print("\n".join(self.crash_log[game_index]))
+			if turn < self.min_turns:
+				if turn < 20:
+					print("\n".join(self.crash_log[game_index]))
 
 	def get_crash_log(self, player, game_index):
 		player_str = player.for_game(game_index) if player else ""
@@ -176,7 +180,8 @@ class PyTanFast(PyEnvironment, ABC):
 		with concurrent.futures.ThreadPoolExecutor(max_workers=self.worker_count) as executor:
 			futures = []
 			for player_index in range(player_count):
-				self.global_step.assign_add(1)
+				if self.global_step:
+					self.global_step.assign_add(1)
 				self.num_step[game_index] += 1
 				action = action_list[player_index][game_index]
 				action_handler, action_args = self.handler.action_lookup[action]

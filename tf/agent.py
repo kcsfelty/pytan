@@ -82,8 +82,11 @@ class Agent:
 			next_time_step))
 		self.time_step = next_time_step
 
+	def replay_buffer_full(self):
+		return (self.replay_buffer.num_frames() / self.game_count) > self.replay_batch_size
+
 	def train(self):
-		if self.replay_buffer.num_frames() > self.replay_batch_size:
+		if self.replay_buffer_full():
 			exp, _ = next(self.iterator)
 			with self.writer.as_default():
 				self.train_fn(exp)
