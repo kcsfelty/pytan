@@ -4,7 +4,7 @@ from abc import ABC
 import tf_agents
 from tf_agents.environments import tf_py_environment, ParallelPyEnvironment
 
-from game.game import PyTanFast
+from game.game import PyTan
 from reference.settings import player_count
 from tf.ObservationMetrics import ObservationMetrics
 from tf.agent import Agent
@@ -67,7 +67,7 @@ def mapped_train_eval(
 	def get_env(process_count, game_count, env_id_prefix):
 		meta_env_list = []
 		for i in range(process_count):
-			class ParallelPyTan(PyTanFast, ABC):
+			class ParallelPyTan(PyTan, ABC):
 				def __init__(self):
 					super().__init__(
 						game_count=game_count,

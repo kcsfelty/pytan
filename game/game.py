@@ -21,10 +21,10 @@ from util.Dice import Dice
 from util.reverse_histogram import reverse_histogram
 
 
-class PyTanFast(PyEnvironment, ABC):
+class PyTan(PyEnvironment, ABC):
 	def __init__(self, game_count=1, global_step=None, worker_count=1, log_dir="./logs", env_id=""):
 
-		super(PyTanFast, self).__init__(handle_auto_reset=True)
+		super(PyTan, self).__init__(handle_auto_reset=True)
 		self.game_count = game_count
 		self.global_step = global_step
 		self.worker_count = worker_count

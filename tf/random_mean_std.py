@@ -7,7 +7,7 @@ from tf_agents.environments import tf_py_environment, ParallelPyEnvironment
 from tf_agents.policies.random_tf_policy import RandomTFPolicy
 
 from tf.agent import Agent
-from game.game import PyTanFast
+from game.game import PyTan
 from reference.settings import player_count
 
 
@@ -46,7 +46,7 @@ def train_eval(
 
 	def get_env():
 		if process_count:
-			class ParallelPyTan(PyTanFast, ABC):
+			class ParallelPyTan(PyTan, ABC):
 				def __init__(self):
 					super().__init__(
 						game_count=game_count,
@@ -55,7 +55,7 @@ def train_eval(
 			env_list = [ParallelPyTan] * process_count
 			py_env = ParallelPyEnvironment(env_list)
 		else:
-			py_env = PyTanFast(game_count, global_step)
+			py_env = PyTan(game_count, global_step)
 
 		return tf_py_environment.TFPyEnvironment(py_env)
 

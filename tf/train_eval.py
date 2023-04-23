@@ -6,7 +6,7 @@ import tensorflow as tf
 from tf_agents.environments import tf_py_environment, ParallelPyEnvironment
 
 from tf.agent import Agent
-from game.game import PyTanFast
+from game.game import PyTan
 from reference.settings import player_count
 
 goal_episode_steps = 1200
@@ -123,7 +123,7 @@ def train_eval(
 		if process_count:
 			meta_env_list = []
 			for i in range(process_count):
-				class ParallelPyTan(PyTanFast, ABC):
+				class ParallelPyTan(PyTan, ABC):
 					def __init__(self):
 						super().__init__(
 							game_count=game_count_,
@@ -134,7 +134,7 @@ def train_eval(
 				meta_env_list.append(ParallelPyTan)
 			py_env = ParallelPyEnvironment(meta_env_list)
 		else:
-			py_env = PyTanFast(
+			py_env = PyTan(
 				game_count_,
 				global_step_,
 				log_dir=log_dir_,
