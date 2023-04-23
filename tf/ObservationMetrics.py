@@ -13,18 +13,18 @@ class ObservationMetrics:
 				self.game_terms.extend([term + "_" + str(i) for i in range(game_state_degrees[term])])
 			else:
 				self.game_terms.append(term)
-		self.public_terms = []
+		self.private_terms = []
 		for term in private_state_degrees:
 			if private_state_degrees[term] > 1:
-				self.public_terms.extend([term + "_" + str(i) for i in range(private_state_degrees[term])])
-			else:
-				self.public_terms.append(term)
-		self.private_terms = []
-		for term in public_state_degrees:
-			if public_state_degrees[term] > 1:
-				self.private_terms.extend([term + "_" + str(i) for i in range(public_state_degrees[term])])
+				self.private_terms.extend([term + "_" + str(i) for i in range(private_state_degrees[term])])
 			else:
 				self.private_terms.append(term)
+		self.public_terms = []
+		for term in public_state_degrees:
+			if public_state_degrees[term] > 1:
+				self.public_terms.extend([term + "_" + str(i) for i in range(public_state_degrees[term])])
+			else:
+				self.public_terms.append(term)
 
 		self.game_state_len = sum([game_state_degrees[term] for term in game_state_degrees])
 		self.private_state_len = sum([private_state_degrees[term] for term in private_state_degrees])
