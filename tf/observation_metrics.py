@@ -48,25 +48,24 @@ class ObservationMetrics:
 		self.victory_point_cards_played_index = self.public_terms.index(df.development_cards_played + "_4")
 
 	def summarize(self, observation):
-		game_state = observation[:self.game_state_len]
-		public_state = observation[self.game_state_len + self.private_state_len:]
+		game_state = observation[:, :self.game_state_len]
+		public_state = observation[:, self.game_state_len + self.private_state_len:]
 		public_state = np.reshape(public_state, (-1, self.public_state_len))
 
 		game_metrics = {
-			df.turn_number: game_state[self.turn_count_index]}
+			df.turn_number: game_state[:, self.turn_count_index]}
 
 		player_metrics = {
-			df.settlement_count: public_state[self.settlement_count_index],
-			df.city_count: public_state[self.city_count_index],
-			df.road_count: public_state[self.road_count_index],
-			df.longest_road: public_state[self.longest_road_index],
-			df.owns_longest_road: public_state[self.owns_longest_road_index],
-			df.owns_largest_army: public_state[self.owns_largest_army_index],
-			"knight_cards_played": public_state[self.knight_cards_played_index],
-			"monopoly_cards_played": public_state[self.monopoly_cards_played_index],
-			"year_of_plenty_cards_played": public_state[self.year_of_plenty_cards_played_index],
-			"road_building_cards_played": public_state[self.road_building_cards_played_index],
-			"victory_point_cards_played": public_state[self.victory_point_cards_played_index],
-		}
+			df.settlement_count: public_state[:, self.settlement_count_index],
+			df.city_count: public_state[:, self.city_count_index],
+			df.road_count: public_state[:, self.road_count_index],
+			df.longest_road: public_state[:, self.longest_road_index],
+			df.owns_longest_road: public_state[:, self.owns_longest_road_index],
+			df.owns_largest_army: public_state[:, self.owns_largest_army_index],
+			"knight_cards_played": public_state[:, self.knight_cards_played_index],
+			"monopoly_cards_played": public_state[:, self.monopoly_cards_played_index],
+			"year_of_plenty_cards_played": public_state[:, self.year_of_plenty_cards_played_index],
+			"road_building_cards_played": public_state[:, self.road_building_cards_played_index],
+			"victory_point_cards_played": public_state[:, self.victory_point_cards_played_index]}
 
 		return game_metrics, player_metrics

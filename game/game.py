@@ -32,7 +32,8 @@ class PyTan(PyEnvironment, ABC):
 
 		# Summaries
 		self.log_dir = log_dir
-		self.writer = tf.summary.create_file_writer(logdir=self.log_dir + "/game")
+		if global_step is not None:
+			self.writer = tf.summary.create_file_writer(logdir=self.log_dir + "/game")
 
 		# Environment
 		self.state = State(self.game_count)
@@ -40,9 +41,9 @@ class PyTan(PyEnvironment, ABC):
 		self.board = Board(self.state, self)
 		self.handler = Handler(self)
 		self.dice = Dice()
-		self.step_type = np.ones((player_count, self.game_count), dtype=np.int32)
-		self.reward = np.zeros((player_count, self.game_count), dtype=np.float32)
-		self.discount = np.ones((player_count, self.game_count), dtype=np.float32)
+		self.step_type = np.ones((player_count, self.game_count, 1), dtype=np.int32)
+		self.reward = np.zeros((player_count, self.game_count, 1), dtype=np.float32)
+		self.discount = np.ones((player_count, self.game_count, 1), dtype=np.float32)
 
 		# Driver helpers
 		self.last_game_at_step = 0
@@ -85,7 +86,7 @@ class PyTan(PyEnvironment, ABC):
 		return discount_spec
 
 	def time_step_spec(self) -> TimeStep:
-		return (time_step_spec,) * player_count
+		return time_step_spec
 
 	def should_reset(self, current_time_step) -> bool:
 		return False
@@ -260,4 +261,10 @@ class PyTan(PyEnvironment, ABC):
 			observation=(obs, mask))
 
 	def get_time_step(self):
-		return tuple(self.get_player_time_step(player_index) for player_index in range(player_count))
+		obs = [self.state.for_player(player_index) for player_index in range(player_count)]
+		mask = [self.player_list[player_index].dynamic_mask.mask for player_index in range(player_count)]
+		return TimeStep(
+			step_type=self.step_type,
+			reward=self.reward,
+			discount=self.discount,
+			observation=(np.array(obs), np.array(mask)))

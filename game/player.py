@@ -67,7 +67,8 @@ class Player:
 		# Diagnostics / Statistics
 		self.implicit_action_count = np.zeros((self.game.game_count,))
 		self.policy_action_count = np.zeros((self.game.game_count,))
-		self.writer = tf.summary.create_file_writer(logdir=self.game.log_dir + "/player{}".format(str(self.index)))
+		if self.game.global_step is not None:
+			self.writer = tf.summary.create_file_writer(logdir=self.game.log_dir + "/player{}".format(str(self.index)))
 
 		# Summaries
 		# Scalars

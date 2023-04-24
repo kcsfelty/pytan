@@ -30,7 +30,7 @@ def train_eval(
 
 		# Replay buffer
 		replay_buffer_size=goal_player_steps + 1,
-		replay_batch_size=2 ** 4,
+		replay_batch_size=2 ** 3,
 
 		# Network parameters
 		learn_rate=1e-5,
@@ -46,7 +46,7 @@ def train_eval(
 		total_steps=500e6,
 		initial_steps=10e6,
 		eval_steps=75000,
-		train_interval=2 ** 4,
+		train_interval=2 ** 3,
 		eval_interval=2 ** 9,
 		log_interval=2 ** 6,
 	):

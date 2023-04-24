@@ -20,11 +20,11 @@ class Agent:
 			epsilon_greedy=0.1,
 			gamma=1.,
 			game_count=1,
+			batch_size=1,
 			replay_batch_size=250,
 			log_dir="./logs"
 		):
 
-		time_step_spec = time_step_spec[0]
 		obs_spec, _ = time_step_spec.observation
 
 		self.categorical_q_net = categorical_q_network.CategoricalQNetwork(
@@ -54,7 +54,7 @@ class Agent:
 
 		self.replay_buffer = TFUniformReplayBuffer(
 			data_spec=self.agent.collect_data_spec,
-			batch_size=game_count,
+			batch_size=batch_size,
 			max_length=replay_buffer_size
 		)
 
@@ -68,7 +68,6 @@ class Agent:
 		self.iterator = iter(self.dataset)
 
 		self.writer = tf.summary.create_file_writer(logdir=log_dir + "/agent{}".format(index))
-		self.game_count = game_count
 		self.time_step = None
 		self.action = None
 
@@ -82,14 +81,10 @@ class Agent:
 			next_time_step))
 		self.time_step = next_time_step
 
-	def replay_buffer_full(self):
-		return (self.replay_buffer.num_frames() / self.game_count) > self.replay_batch_size
-
 	def train(self):
-		if self.replay_buffer_full():
-			exp, _ = next(self.iterator)
-			with self.writer.as_default():
-				self.train_fn(exp)
+		exp, _ = next(self.iterator)
+		with self.writer.as_default():
+			self.train_fn(exp)
 
 	@staticmethod
 	def splitter(obs_tuple):
