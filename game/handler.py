@@ -113,7 +113,7 @@ class Handler:
 		Occurs:
 			never during build phase
 			after dice have been rolled
-			player is current player
+			player is self_play player
 		"""
 		assert player is self.game.current_player[game_index], self.game.get_crash_log(player, game_index)
 		if player.can_afford(gs.development_card_cost, game_index) and len(self.game.development_card_stack[game_index]) > 0:
@@ -151,7 +151,7 @@ class Handler:
 		"""
 		Occurs:
 			never during build phase
-			player must be current player
+			player must be self_play player
 			dice must have been rolled
 		"""
 		assert self.rules.post_roll(player, game_index), self.game.get_crash_log(player, game_index)
@@ -176,7 +176,7 @@ class Handler:
 		else:
 			self.rules.dice_rolled(game_index), self.game.get_crash_log(player, game_index)
 
-		# Reset the current player to non-active status
+		# Reset the self_play player to non-active status
 		player.current_player[game_index].fill(False)
 		player.development_cards[game_index] += player.development_card_bought_this_turn[game_index]
 		player.development_card_count[game_index] += np.sum(player.development_card_bought_this_turn[game_index])
@@ -191,7 +191,7 @@ class Handler:
 		self.game.state.bought_development_card_count[game_index].fill(0)
 		self.game.state.played_development_card_count[game_index].fill(0)
 
-		# Set next player to be current player
+		# Set next player to be self_play player
 		if self.game.player_order_build_phase[game_index]:
 			next_player_index = self.game.player_order_build_phase[game_index].pop(0)
 		elif self.game.player_order_build_phase_reversed[game_index]:
@@ -389,7 +389,7 @@ class Handler:
 	def handle_confirm_player_trade(self, trade_player, player, game_index):
 		"""
 		Occurs:
-			after all opponents have responded to the current trade offer and at least one accepted
+			after all opponents have responded to the self_play trade offer and at least one accepted
 		"""
 		assert self.rules.confirm_player_trade(trade_player, player, game_index)
 		self.handle_player_trade(player, trade_player, self.game.state.current_player_trade[game_index], game_index)

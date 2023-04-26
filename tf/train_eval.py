@@ -18,7 +18,7 @@ n_step_gamma = 1 - math.log(2) / half_life_steps
 
 def train_eval(
 		# Performance / Logging
-		log_dir="./logs/current",
+		log_dir="./logs/self_play",
 		train_process_count=None,
 		eval_process_count=None,
 		thread_count=2 ** 5,

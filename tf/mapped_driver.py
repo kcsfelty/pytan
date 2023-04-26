@@ -1,13 +1,8 @@
 import asyncio
-import concurrent.futures
-
 import tensorflow as tf
 import numpy as np
 from tf_agents.trajectories import from_transition
 from reference.specs import time_step_spec
-
-
-
 
 
 class MappedDriver:
@@ -38,29 +33,9 @@ class MappedDriver:
 		return splits
 
 	def get_action(self, mapped_time_step):
-		# with concurrent.futures.ThreadPoolExecutor() as executor:
-		# 	futures = [
-		# 		executor.submit(policy.action, time_step)
-		# 		for time_step, policy in zip(mapped_time_step, self.policy_list)
-		# 	]
-		# 	results = [future.result() for future in futures]
-		# 	print(results)
-		# 	return results
-
-		# # action_list = [None] * len(self.policy_list)
-		# with concurrent.futures.ThreadPoolExecutor() as executor:
-		# 	futures = []
-		# 	for index, (policy, time_step) in enumerate(zip(self.policy_list, mapped_time_step)):
-		# 		futures.append(executor.submit(policy.action, time_step=time_step))
-		# 	# for i, future in enumerate(futures):
-		# 	# 	# result = future.result()
-		# 	# 	# print(result)
-		# 	# 	action_list[i] = future.result()
-		#
-		# print(action_list)
-		action_list = []
+		action_list = [None] * len(self.policy_list)
 		for index, (policy, time_step) in enumerate(zip(self.policy_list, mapped_time_step)):
-			action_list.append(policy.action(time_step=time_step))
+			action_list[index] = policy.action(time_step=time_step)
 
 		return action_list
 
