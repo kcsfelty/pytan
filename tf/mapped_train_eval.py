@@ -55,13 +55,14 @@ def mapped_train_eval(
 
 		# Intervals
 		total_steps=500e6,
-		eval_steps=50e4,
+		eval_steps=2 ** 4 * 3000,
 		train_steps=2 ** 4,
 		train_per_eval=1000,
 		train_log_interval=2**7,
-		eval_log_interval=2**4,
+		eval_log_interval=2**6,
 	):
-	iteration = tf.Variable(0, dtype=tf.int32)
+	train_iteration = tf.Variable(0, dtype=tf.int32)
+	eval_iteration = tf.Variable(0, dtype=tf.int32)
 	train_global_step = tf.Variable(0, dtype=tf.int32)
 	eval_global_step = tf.Variable(0, dtype=tf.int32)
 	epsilon_greedy_delta = tf.constant(epsilon_greedy_start - epsilon_greedy_end)
@@ -127,25 +128,26 @@ def mapped_train_eval(
 									tf.summary.scalar(name=agent_metric.lower(), data=scalar)
 		return handle_summaries
 
-	def handle_trajectory_list(traj_list):
+	def add_batch(traj_list):
 		for agent, traj in zip(agent_list, traj_list):
 			agent.replay_buffer.add_batch(traj)
 
 	def update_train_global_step(traj_list):
 		existing_games = len(tf.where(~traj_list[0].is_first()))
 		train_global_step.assign_add(existing_games)
-		iteration.assign_add(1)
+		train_iteration.assign_add(1)
 
 	def update_eval_global_step(traj_list):
 		existing_games = len(tf.where(~traj_list[0].is_first()))
 		eval_global_step.assign_add(existing_games)
+		eval_iteration.assign_add(1)
 
 	def train_policies():
 		for agent in agent_list:
 			agent.train()
 
 	def eval_log():
-		if eval_global_step.numpy() % eval_log_interval == 0:
+		if eval_iteration.numpy() % eval_log_interval == 0:
 			log_str = ""
 			log_str += "[EVAL]  "
 			log_str += "[global: {}] ".format(str(eval_global_step.numpy()).rjust(10))
@@ -154,7 +156,7 @@ def mapped_train_eval(
 			print(log_str)
 
 	def train_log():
-		if iteration.numpy() % train_log_interval == 0:
+		if train_iteration.numpy() % train_log_interval == 0:
 			log_str = ""
 			log_str += "[TRAIN]  "
 			log_str += "[global: {}] ".format(str(train_global_step.numpy()).rjust(10))
@@ -189,7 +191,7 @@ def mapped_train_eval(
 
 	agent_list = get_agent_list()
 
-	iteration_rate_tracker = StepPerSecondTracker(iteration)
+	iteration_rate_tracker = StepPerSecondTracker(train_iteration)
 	train_rate_tracker = StepPerSecondTracker(train_global_step)
 	eval_rate_tracker = StepPerSecondTracker(eval_global_step)
 
@@ -200,7 +202,7 @@ def mapped_train_eval(
 		max_steps=train_steps,
 		observers=[
 			update_train_global_step,
-			handle_trajectory_list,
+			add_batch,
 			summarize_with_writer(train_writer),
 			lambda _: train_log(),
 		])
@@ -220,7 +222,7 @@ def mapped_train_eval(
 	eval_driver.run()
 
 	print("Providing initial steps to seed replay buffer.")
-	while iteration.numpy() < replay_buffer_size:
+	while train_iteration.numpy() < replay_buffer_size:
 		train_driver.run()
 
 	print("Initial steps completed. Beginning Training.")
