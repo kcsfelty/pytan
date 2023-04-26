@@ -59,7 +59,7 @@ def mapped_train_eval(
 		train_steps=2 ** 4,
 		train_per_eval=1000,
 		train_log_interval=2**7,
-		eval_log_interval=2**6,
+		eval_log_interval=2**8,
 	):
 	train_iteration = tf.Variable(0, dtype=tf.int32)
 	eval_iteration = tf.Variable(0, dtype=tf.int32)
