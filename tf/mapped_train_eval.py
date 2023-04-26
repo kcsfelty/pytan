@@ -138,7 +138,7 @@ def mapped_train_eval(
 
 	def update_eval_global_step(traj_list):
 		existing_games = len(tf.where(~traj_list[0].is_first()))
-		train_global_step.assign_add(existing_games)
+		eval_global_step.assign_add(existing_games)
 
 	def train_policies():
 		for agent in agent_list:
