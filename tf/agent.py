@@ -19,7 +19,6 @@ class Agent:
 			fc_layer_params=(2 ** 6, 2 ** 6, 2 ** 6,),
 			epsilon_greedy=0.1,
 			gamma=1.,
-			game_count=1,
 			batch_size=1,
 			replay_batch_size=250,
 			log_dir="./logs"
@@ -70,16 +69,6 @@ class Agent:
 		self.writer = tf.summary.create_file_writer(logdir=log_dir + "/agent{}".format(index))
 		self.time_step = None
 		self.action = None
-
-	def add_batch(self, next_time_step):
-		if not self.time_step:
-			self.time_step = next_time_step
-			return
-		self.replay_buffer.add_batch(trajectory.from_transition(
-			self.time_step,
-			self.action,
-			next_time_step))
-		self.time_step = next_time_step
 
 	def train(self):
 		exp, _ = next(self.iterator)

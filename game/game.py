@@ -5,7 +5,6 @@ from abc import ABC
 from itertools import cycle
 
 import numpy as np
-import tensorflow as tf
 from tf_agents.environments import PyEnvironment
 from tf_agents.trajectories import TimeStep, StepType
 from tf_agents.typing import types
@@ -22,18 +21,15 @@ from util.reverse_histogram import reverse_histogram
 
 
 class PyTan(PyEnvironment, ABC):
-	def __init__(self, game_count=1, global_step=None, worker_count=1, log_dir="./logs", env_id=""):
+	def __init__(self, game_count=1, worker_count=1, log_dir="./logs", env_id="", shaped_rewards=True):
 
 		super(PyTan, self).__init__(handle_auto_reset=True)
 		self.game_count = game_count
-		self.global_step = global_step
 		self.worker_count = worker_count
 		self.env_id = env_id
 
 		# Summaries
 		self.log_dir = log_dir
-		if global_step is not None:
-			self.writer = tf.summary.create_file_writer(logdir=self.log_dir + "/game")
 
 		# Environment
 		self.state = State(self.game_count)
@@ -41,6 +37,7 @@ class PyTan(PyEnvironment, ABC):
 		self.board = Board(self.state, self)
 		self.handler = Handler(self)
 		self.dice = Dice()
+		self.shaped_rewards = shaped_rewards
 		self.step_type = np.ones((player_count, self.game_count, 1), dtype=np.int32)
 		self.reward = np.zeros((player_count, self.game_count, 1), dtype=np.float32)
 		self.discount = np.ones((player_count, self.game_count, 1), dtype=np.float32)
@@ -106,38 +103,6 @@ class PyTan(PyEnvironment, ABC):
 
 		return player_list
 
-	def write_episode_summary(self, game_index):
-		if self.global_step:
-			turn = self.state.turn_number[game_index].item()
-			step = self.num_step[game_index]
-			global_step = self.global_step.numpy().item()
-			time_delta = time.perf_counter() - self.last_game_at_time
-			self.last_game_at_time = time.perf_counter()
-			step_delta = global_step - self.last_game_at_step
-			self.last_game_at_step = int(global_step)
-			rate = int(step_delta / time_delta)
-			summary = ""
-			if self.env_id:
-				summary += "[env: {}] ".format(str(self.env_id).rjust(5))
-			summary += "[game:{}] ".format(str(game_index).rjust(5))
-			summary += "[turns:{}] ".format(str(turn).rjust(5))
-			summary += "[steps:{}] ".format(str(step).rjust(6))
-			summary += "[global:{}]   ".format(str(global_step).rjust(10))
-			summary += "[rate:{}]   ".format(str(rate).rjust(6))
-			if self.winning_player[game_index]:
-				summary += str(self.winning_player[game_index].for_game(game_index))
-			print(summary)
-
-			with self.writer.as_default(step=global_step):
-				tf.summary.scalar(name="turn_count", data=turn)
-
-			for player in self.player_list:
-				player.write_episode_summary(game_index)
-
-			if turn < self.min_turns:
-				if turn < 20:
-					print("\n".join(self.crash_log[game_index]))
-
 	def get_crash_log(self, player, game_index):
 		player_str = player.for_game(game_index) if player else ""
 		self.crash_log[game_index].append(player_str)
@@ -181,8 +146,6 @@ class PyTan(PyEnvironment, ABC):
 		with concurrent.futures.ThreadPoolExecutor(max_workers=self.worker_count) as executor:
 			futures = []
 			for player_index in range(player_count):
-				if self.global_step:
-					self.global_step.assign_add(1)
 				self.num_step[game_index] += 1
 				action = action_list[player_index][game_index]
 				action_handler, action_args = self.handler.action_lookup[action]
@@ -193,7 +156,7 @@ class PyTan(PyEnvironment, ABC):
 				future.result()
 
 	def _reset(self):
-		print("Resetting all games")
+		print("[{}] Resetting all games".format(self.env_id))
 		reset_games = [x for x in range(self.game_count)]
 		for game_index in reset_games:
 			self.reset_game(game_index)
@@ -201,7 +164,6 @@ class PyTan(PyEnvironment, ABC):
 		return self.get_time_step()
 
 	def complete_game(self, game_index):
-		self.write_episode_summary(game_index)
 		self.reset_game(game_index)
 		self.step_type[:, game_index] = StepType.FIRST
 		self.start_game(game_index)

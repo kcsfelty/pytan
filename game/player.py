@@ -1,9 +1,7 @@
 import numpy as np
-
 import reference.definitions as df
 import reference.settings as gs
 from game.mask import Mask
-import tensorflow as tf
 
 
 class Player:
@@ -67,8 +65,6 @@ class Player:
 		# Diagnostics / Statistics
 		self.implicit_action_count = np.zeros((self.game.game_count,))
 		self.policy_action_count = np.zeros((self.game.game_count,))
-		if self.game.global_step is not None:
-			self.writer = tf.summary.create_file_writer(logdir=self.game.log_dir + "/player{}".format(str(self.index)))
 
 		# Summaries
 		# Scalars
@@ -120,7 +116,7 @@ class Player:
 
 	def change_victory_points(self, change, game_index):
 		self.victory_points[game_index] += change
-		# self.game.reward[self.index][game_index] += float(change)
+		self.game.reward[self.index][game_index] += float(change)
 		self.check_victory(game_index)
 
 	def check_victory(self, game_index):
@@ -129,7 +125,8 @@ class Player:
 		if self.actual_victory_points[game_index] >= gs.victory_points_to_win:
 			self.development_cards_played[game_index][gs.victory_point_card_index] += self.development_cards[game_index][gs.victory_point_card_index]
 			self.victory_points[game_index] += victory_card_points
-			# self.game.reward[self.index][game_index] += float(victory_card_points)
+			if self.game.shaped_rewards:
+				self.game.reward[self.index][game_index] += float(victory_card_points)
 			self.game.winning_player[game_index] = self
 
 	def can_afford(self, trade, game_index):
@@ -162,40 +159,3 @@ class Player:
 					paths_from_this_node.append(path_thus_far)
 			paths.extend(paths_from_this_node)
 		self.longest_road[game_index] = len(max(paths, key=len))
-
-	def write_episode_summary(self, game_index):
-		self.win_list.append(int(self.game.winning_player[game_index] == self))
-		scalars = {
-			"victory_points": self.victory_points[game_index].item(),
-			"settlements": self.settlement_count[game_index].item(),
-			"cities": self.city_count[game_index].item(),
-			"roads": self.road_count[game_index].item(),
-			"longest_road": self.longest_road[game_index].item(),
-			"owns_longest_road": self.owns_longest_road[game_index].item(),
-			"owns_largest_army": self.owns_largest_army[game_index].item(),
-			"knights_played": self.development_cards_played[game_index][gs.knight_index].item(),
-			"monopoly_played": self.development_cards_played[game_index][gs.monopoly_index].item(),
-			"year_of_plenty_played": self.development_cards_played[game_index][gs.year_of_plenty_index].item(),
-			"road_building_played": self.development_cards_played[game_index][gs.road_building_index].item(),
-			"victory_cards_played": self.development_cards_played[game_index][gs.victory_point_card_index].item(),
-			"win_rate_50": self.win_rate(50),
-		}
-
-		if self.game.winning_player[game_index] == self:
-			self.win_list.append(1)
-			scalars["turn_count"] = self.game.state.turn_number[game_index].item()
-
-		step = tf.cast(self.game.global_step, dtype=tf.int64)
-
-		with self.writer.as_default(step):
-			for key in scalars:
-				tf.summary.scalar(name=key, data=float(scalars[key]))
-
-	def win_rate(self, n):
-		return self.avg_last_n(self.win_list, n)
-
-	def avg_last_n(self, values, n):
-		last_values = values[-n:]
-		if len(last_values) == 0:
-			return 0
-		return sum(last_values) / len(last_values)

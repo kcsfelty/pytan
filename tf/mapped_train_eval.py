@@ -30,36 +30,36 @@ def mapped_train_eval(
 		# Performance / Logging
 		log_dir=os.path.join("./logs", "current"),
 		train_process_count=8,
-		eval_process_count=1,
+		eval_process_count=2,
 		thread_count=2 ** 5,
 		agent_count=1,
 
 		# Batching
-		train_game_count=2 ** 8,
-		eval_game_count=2 ** 4,
-		n_step_update=goal_player_steps,
+		train_game_count=2 ** 7,
+		eval_game_count=2 ** 3,
+		n_step_update=32,
 
 		# Replay buffer
-		replay_buffer_size=goal_player_steps + 1,
-		replay_batch_size=2 ** 4,
+		replay_buffer_size=2 * goal_player_steps + 1,
+		replay_batch_size=2 ** 3,
 
 		# Network parameters
 		learn_rate=1e-4,
-		fc_layer_params=(2 ** 8, 2 ** 7,),
+		fc_layer_params=(2 ** 10, 2 ** 9, 2 ** 8, 2 ** 7,),
 		gamma=n_step_gamma,
 
 		# Greedy policy epsilon
-		epsilon_greedy_start=0.10,
+		epsilon_greedy_start=0.05,
 		epsilon_greedy_end=0.01,
 		epsilon_greedy_half_life=10e6,
 
 		# Intervals
 		total_steps=500e6,
-		eval_steps=2 ** 4 * 3000,
-		train_steps=2 ** 4,
-		train_per_eval=1000,
-		train_log_interval=2**7,
-		eval_log_interval=2**8,
+		eval_steps=2 ** 4 * 10000,
+		train_steps=2 ** 3,
+		train_per_eval=2 ** 11,
+		train_log_interval=2 ** 7,
+		eval_log_interval=2 ** 8,
 	):
 	train_iteration = tf.Variable(0, dtype=tf.int32)
 	eval_iteration = tf.Variable(0, dtype=tf.int32)
@@ -151,7 +151,7 @@ def mapped_train_eval(
 			log_str = ""
 			log_str += "[EVAL]  "
 			log_str += "[global: {}] ".format(str(eval_global_step.numpy()).rjust(10))
-			log_str += "[pct: {}%] ".format(str(int(eval_global_step.numpy() / eval_steps * 100)).rjust(5))
+			log_str += "[pct: {}%] ".format(str(int((eval_global_step.numpy() % eval_steps) / eval_steps * 100)).rjust(5))
 			log_str += "[rate: {}] ".format(str(eval_rate_tracker.steps_per_second())[:7])
 			print(log_str)
 

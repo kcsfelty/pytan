@@ -1,7 +1,5 @@
 import random
-
 import numpy as np
-
 import reference.definitions as df
 import reference.settings as gs
 from game.rules import Rules
@@ -696,7 +694,8 @@ class Handler:
 		if card_index == gs.victory_point_card_index:
 			player.development_cards[game_index][card_index] += 1
 			player.check_victory(game_index)
-			# self.game.reward[player.index][game_index] += float(gs.victory_point_card_victory_points)
+			if self.game.shaped_rewards:
+				self.game.reward[player.index][game_index] += float(gs.victory_point_card_victory_points)
 		else:
 			player.development_card_bought_this_turn[game_index][card_index] += 1
 		if player is self.game.current_player[game_index]:
