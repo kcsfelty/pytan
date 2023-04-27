@@ -30,22 +30,22 @@ def mapped_train_eval(
 		# Performance / Logging
 		log_dir=os.path.join("./logs", "current"),
 		train_process_count=8,
-		eval_process_count=2,
+		eval_process_count=1,
 		thread_count=2 ** 5,
 		agent_count=1,
 
 		# Batching
-		train_game_count=2 ** 7,
+		train_game_count=2 ** 8,
 		eval_game_count=2 ** 3,
-		n_step_update=32,
+		n_step_update=2 ** 6,
 
 		# Replay buffer
-		replay_buffer_size=2 * goal_player_steps + 1,
-		replay_batch_size=2 ** 3,
+		replay_buffer_size=750,
+		replay_batch_size=2 ** 6,
 
 		# Network parameters
 		learn_rate=1e-4,
-		fc_layer_params=(2 ** 10, 2 ** 9, 2 ** 8, 2 ** 7,),
+		fc_layer_params=(2 ** 10, 2 ** 9, 2 ** 8,),
 		gamma=n_step_gamma,
 
 		# Greedy policy epsilon
@@ -56,7 +56,7 @@ def mapped_train_eval(
 		# Intervals
 		total_steps=500e6,
 		eval_steps=2 ** 4 * 10000,
-		train_steps=2 ** 3,
+		train_steps=2 ** 6,
 		train_per_eval=2 ** 11,
 		train_log_interval=2 ** 7,
 		eval_log_interval=2 ** 8,
