@@ -40,21 +40,21 @@ def mapped_train_eval(
 		n_step_update=2 ** 6,
 
 		# Replay buffer
-		replay_buffer_size=750,
+		replay_buffer_size=650,
 		replay_batch_size=2 ** 6,
 
 		# Network parameters
-		learn_rate=1e-4,
-		fc_layer_params=(2 ** 10, 2 ** 9, 2 ** 8,),
+		learn_rate=1e-3,
+		fc_layer_params=(2 ** 8, 2 ** 8, 2 ** 8, 2 ** 7),
 		gamma=n_step_gamma,
 
 		# Greedy policy epsilon
 		epsilon_greedy_start=0.05,
 		epsilon_greedy_end=0.01,
-		epsilon_greedy_half_life=10e6,
+		epsilon_greedy_half_life=5e6,
 
 		# Intervals
-		total_steps=500e6,
+		total_steps=1e9,
 		eval_steps=2 ** 4 * 10000,
 		train_steps=2 ** 6,
 		train_per_eval=2 ** 11,
