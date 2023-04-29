@@ -30,7 +30,7 @@ def mapped_train_eval(
 		# Performance / Logging
 		log_dir=os.path.join("./logs", "current"),
 		train_process_count=7,
-		eval_process_count=1,
+		eval_process_count=4,
 		thread_count=2 ** 5,
 		agent_count=1,
 
@@ -40,12 +40,12 @@ def mapped_train_eval(
 
 		# Batching
 		train_game_count=2 ** 8,
-		eval_game_count=2 ** 3,
-		n_step_update=2 ** 4,
+		eval_game_count=2 ** 2,
+		n_step_update=2 ** 6,
 
 		# Replay buffer
 		replay_buffer_size=500,
-		replay_batch_size=2 ** 5,
+		replay_batch_size=2 ** 6,
 
 		# Network parameters
 		learn_rate=1e-3,
@@ -53,15 +53,16 @@ def mapped_train_eval(
 		gamma=n_step_gamma,
 
 		# Greedy policy epsilon
-		epsilon_start=1.00,
-		epsilon_end=0.01,
-		epsilon_half_life=2e6,
+		scalar_epsilon=None,
+		epsilon_start=0.00,
+		epsilon_end=0.00,
+		epsilon_half_life=1,
 
 		# Intervals
 		total_steps=1e9,
-		eval_steps=2 ** 4 * 0,
-		eval_episodes=10,
-		train_steps=2 ** 5,
+		eval_steps=1e6,
+		eval_episodes=64,
+		train_steps=2 ** 6,
 		train_per_eval=2 ** 11,
 		train_log_interval=2 ** 8,
 		eval_log_interval=2 ** 8,
@@ -77,7 +78,9 @@ def mapped_train_eval(
 	epsilon_delta = tf.constant(epsilon_start - epsilon_end)
 	epsilon_base = tf.constant(1 - math.log(2) / epsilon_half_life)
 
-	def epsilon():
+	eval_turn_list = []
+
+	def step_epsilon():
 		eps = tf.math.pow(epsilon_base, tf.cast(train_global_step, tf.float32))
 		eps = tf.multiply(eps, epsilon_delta)
 		eps = tf.add(epsilon_end, eps)
@@ -91,6 +94,7 @@ def mapped_train_eval(
 		meta_env_list = [ParallelPyTan] * process_count
 		return tf_py_environment.TFPyEnvironment(ParallelPyEnvironment(meta_env_list))
 
+	# TODO modify to allow for more than one type of agent, also build a base class BasePyTanAgent, C51PyTanAgent, etc.
 	def get_agent_list():
 		return [Agent(
 			index=index,
@@ -102,7 +106,7 @@ def mapped_train_eval(
 			fc_layer_params=fc_layer_params,
 			n_step_update=n_step_update,
 			learn_rate=learn_rate,
-			epsilon_greedy=epsilon,
+			epsilon_greedy=scalar_epsilon or step_epsilon,
 			gamma=gamma,
 			log_dir=os.path.join(log_dir, "agents")
 		) for index in range(agent_count)]
@@ -145,6 +149,12 @@ def mapped_train_eval(
 		eval_global_step.assign_add(existing_games)
 		eval_iteration.assign_add(1)
 
+	def process_eval_results():
+		# TODO: take a statistically significant number of samples (ideally, more) from the eval driver
+		# then calculate the mean and std
+		# compare the results to the found random mean / std and estimated human mean / std
+		pass
+
 	def train_policies():
 
 		# TODO: train async to minimize performance hit
@@ -169,7 +179,7 @@ def mapped_train_eval(
 			log_str += "[pct: {}%] ".format(str(int(train_global_step.numpy() / total_steps * 100)).rjust(5))
 			log_str += "[step rate: {}] ".format(str(train_rate_tracker.steps_per_second())[:7])
 			log_str += "[iter rate: {}] ".format(str(iteration_rate_tracker.steps_per_second())[:7])
-			log_str += "[epsilon: {}] ".format(str(epsilon().numpy()))
+			log_str += "[epsilon: {}] ".format(str(step_epsilon().numpy()))
 			print(log_str)
 
 	metrics = ObservationMetrics()

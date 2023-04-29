@@ -462,17 +462,21 @@ class Handler:
 
 	def handle_discard(self, trade, player, game_index):
 		if self.game.assert_state:
+			# TODO bug fix
+			# multiple players discard
+			# one player discards more than others likely
 			assert player.must_discard[game_index] > 0, self.game.get_crash_log(player, game_index)
 			assert not self.rules.build_phase(game_index), self.game.get_crash_log(player, game_index)
 		# assert dice rolled
-		self.handle_bank_trade(trade, player, game_index)
 		player.discard_total[game_index] -= trade
 		player.must_discard[game_index] -= 1
+		self.handle_bank_trade(trade, player, game_index)
 		someone_must_discard = False
 		for discard_player in self.game.player_list:
 			if discard_player.must_discard[game_index] > 0:
 				someone_must_discard = True
-				self.check_discard_trades(discard_player, game_index)
+				if discard_player is player:
+					self.check_discard_trades(discard_player, game_index)
 			else:
 				discard_player.dynamic_mask.only(df.no_action, game_index)
 		if not someone_must_discard:
