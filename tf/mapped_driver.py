@@ -33,6 +33,9 @@ class MappedDriver:
 		return splits
 
 	def get_action(self, mapped_time_step):
+
+		# TODO: add async calls to minimize performance hit from having multiple polices
+
 		action_list = [None] * len(self.policy_list)
 		for index, (policy, time_step) in enumerate(zip(self.policy_list, mapped_time_step)):
 			action_list[index] = policy.action(time_step=time_step)

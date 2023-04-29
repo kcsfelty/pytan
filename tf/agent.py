@@ -1,7 +1,6 @@
 from tf_agents.agents.categorical_dqn import categorical_dqn_agent
 from tf_agents.networks import categorical_q_network
 from tf_agents.replay_buffers import TFUniformReplayBuffer
-from tf_agents.trajectories import trajectory
 from tf_agents.utils import common
 import tensorflow as tf
 
@@ -49,6 +48,9 @@ class Agent:
 			gamma=gamma,
 			summarize_grads_and_vars=True)
 
+		self.collect_policy = self.agent.collect_policy
+		self.policy = self.agent.policy
+
 		self.train_fn = common.function(self.agent.train)
 
 		self.replay_buffer = TFUniformReplayBuffer(
@@ -67,8 +69,6 @@ class Agent:
 		self.iterator = iter(self.dataset)
 
 		self.writer = tf.summary.create_file_writer(logdir=log_dir + "/agent{}".format(index))
-		self.time_step = None
-		self.action = None
 
 	def train(self):
 		exp, _ = next(self.iterator)

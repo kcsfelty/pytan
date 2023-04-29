@@ -1,33 +1,22 @@
-import math
 import os.path
 from abc import ABC
 
+import numpy as np
+import tensorflow as tf
 import tf_agents
 from tf_agents.environments import tf_py_environment, ParallelPyEnvironment
-from tf_agents.policies.random_py_policy import RandomPyPolicy
 from tf_agents.policies.random_tf_policy import RandomTFPolicy
 from tf_agents.train.step_per_second_tracker import StepPerSecondTracker
 
 from game.game import PyTan
 from reference.settings import player_count
-from tf.observation_metrics import ObservationMetrics
-from tf.agent import Agent
 from tf.mapped_driver import MappedDriver
+from tf.observation_metrics import ObservationMetrics
 from tf.random_policy_mapping import random_policy_mapping
-import tensorflow as tf
-
-goal_episode_steps = 1200
-goal_player_steps = goal_episode_steps // player_count
-oldest_n_step_discount_factor = 3
-half_life_steps = goal_player_steps / oldest_n_step_discount_factor
-n_step_gamma = 1 - math.log(2) / half_life_steps
-
-num_game = 2 ** 12
-num_process = 6
-game_per_process = num_game // num_process
+from reference.definitions import turn_number
 
 
-def mapped_train_eval(
+def random_benchmark(
 		# Performance / Logging
 		log_dir=os.path.join("./logs", "random"),
 		train_process_count=7,
@@ -38,23 +27,20 @@ def mapped_train_eval(
 		train_game_count=2 ** 8,
 
 		# Intervals
-		total_steps=500e6,
+		total_episodes=10000,
 	):
 	iteration = tf.Variable(0, dtype=tf.int32)
 	train_global_step = tf.Variable(0, dtype=tf.int32)
+	episodes = tf.Variable(0, dtype=tf.int32)
+	episode_turn_list = []
 
-	def get_env(process_count, game_count, env_id_prefix):
-		meta_env_list = []
-		for i in range(process_count):
-			class ParallelPyTan(PyTan, ABC):
-				def __init__(self):
-					super().__init__(
-						game_count=game_count,
-						worker_count=thread_count,
-						log_dir=log_dir,
-						env_id="{}-{}".format(env_id_prefix, i))
+	summary_writer = tf.summary.create_file_writer(logdir=os.path.join(log_dir, "game"))
 
-			meta_env_list.append(ParallelPyTan)
+	def get_env(process_count, game_count):
+		class ParallelPyTan(PyTan, ABC):
+			def __init__(self):
+				super().__init__(game_count=game_count, worker_count=thread_count, log_dir=log_dir)
+		meta_env_list = [ParallelPyTan] * process_count
 		return tf_py_environment.TFPyEnvironment(ParallelPyEnvironment(meta_env_list))
 
 	def update_train_global_step(traj_list):
@@ -62,20 +48,44 @@ def mapped_train_eval(
 		train_global_step.assign_add(existing_games)
 		iteration.assign_add(1)
 
-	def train_log():
-		if iteration.numpy() % 2 ** 4 == 0:
+	def train_log(traj_list):
+		games_completed = np.sum(traj_list[0].is_last())
+		episodes.assign_add(games_completed)
+		if games_completed > 0:
 			log_str = ""
 			log_str += "[TRAIN]  "
 			log_str += "[global: {}] ".format(str(train_global_step.numpy()).rjust(10))
-			log_str += "[pct: {}%] ".format(str(int(train_global_step.numpy() / total_steps * 100)).rjust(5))
+			log_str += "[games: {}%] ".format(str(int(episodes.numpy() / total_episodes * 100)).rjust(5))
 			log_str += "[step rate: {}] ".format(str(train_rate_tracker.steps_per_second())[:7])
 			log_str += "[iter rate: {}] ".format(str(iteration_rate_tracker.steps_per_second())[:7])
 			print(log_str)
 
+	def summarize_with_writer(writer):
+		def handle_summaries(traj_list):
+			finished_games = tf.where(traj_list[0].is_last())
+			observation, _ = traj_list[0].observation
+			observation = tf.squeeze(tf.gather(observation, finished_games), axis=(1,))
+			if observation.shape[0]:
+				game_metrics, _ = metrics.summarize(observation)
+				with tf.name_scope("summary"):
+					with writer.as_default(step=train_global_step.numpy()):
+						for game_metric in game_metrics:
+							data = game_metrics[game_metric].numpy()
+							for scalar in data:
+								tf.summary.scalar(name=game_metric.lower(), data=scalar)
+				with tf.name_scope("benchmark"):
+					for turns in game_metrics[turn_number]:
+						episode_turn_list.append(turns)
+						tf.summary.scalar(name="turn_number", data=turns)
+						tf.summary.scalar(name="mean", data=np.mean(episode_turn_list))
+						tf.summary.scalar(name="standard_deviation", data=np.std(episode_turn_list))
+		return handle_summaries
+
+	metrics = ObservationMetrics()
+
 	train_env = get_env(
 		process_count=train_process_count,
-		game_count=train_game_count,
-		env_id_prefix="train")
+		game_count=train_game_count)
 
 	train_policy_mapping = random_policy_mapping(
 		agent_count=agent_count,
@@ -99,17 +109,18 @@ def mapped_train_eval(
 		environment=train_env,
 		policy_list=[random_policy] * agent_count,
 		policy_mapping=train_policy_mapping,
-		max_steps=total_steps,
+		max_episodes=total_episodes,
 		observers=[
 			update_train_global_step,
-			lambda _: train_log(),
+			train_log,
+			summarize_with_writer(summary_writer),
 		])
 
 	train_driver.run()
 
 
 def main(_):
-	mapped_train_eval()
+	random_benchmark()
 
 
 if __name__ == '__main__':

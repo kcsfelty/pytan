@@ -1,4 +1,3 @@
-import asyncio
 import math
 import os.path
 from abc import ABC
@@ -14,6 +13,7 @@ from tf.agent import Agent
 from tf.mapped_driver import MappedDriver
 from tf.random_policy_mapping import random_policy_mapping
 import tensorflow as tf
+import numpy as np
 
 goal_episode_steps = 1200
 goal_player_steps = goal_episode_steps // player_count
@@ -34,14 +34,18 @@ def mapped_train_eval(
 		thread_count=2 ** 5,
 		agent_count=1,
 
+		# Train config
+		fill_replay_buffer=True,
+		initial_intervals=2000,
+
 		# Batching
 		train_game_count=2 ** 8,
 		eval_game_count=2 ** 3,
-		n_step_update=2 ** 5,
+		n_step_update=2 ** 4,
 
 		# Replay buffer
 		replay_buffer_size=500,
-		replay_batch_size=2 ** 6,
+		replay_batch_size=2 ** 5,
 
 		# Network parameters
 		learn_rate=1e-3,
@@ -49,45 +53,42 @@ def mapped_train_eval(
 		gamma=n_step_gamma,
 
 		# Greedy policy epsilon
-		epsilon_greedy_start=0.10,
-		epsilon_greedy_end=0.01,
-		epsilon_greedy_half_life=5e6,
+		epsilon_start=1.00,
+		epsilon_end=0.01,
+		epsilon_half_life=2e6,
 
 		# Intervals
 		total_steps=1e9,
 		eval_steps=2 ** 4 * 0,
-		train_steps=2 ** 6,
+		eval_episodes=10,
+		train_steps=2 ** 5,
 		train_per_eval=2 ** 11,
-		train_log_interval=2 ** 7,
+		train_log_interval=2 ** 8,
 		eval_log_interval=2 ** 8,
 	):
 	train_iteration = tf.Variable(0, dtype=tf.int32)
 	eval_iteration = tf.Variable(0, dtype=tf.int32)
 	train_global_step = tf.Variable(0, dtype=tf.int32)
 	eval_global_step = tf.Variable(0, dtype=tf.int32)
-	epsilon_greedy_delta = tf.constant(epsilon_greedy_start - epsilon_greedy_end)
-	epsilon_greedy_base = tf.constant(1 - math.log(2) / epsilon_greedy_half_life)
+	current_eval_episodes = tf.Variable(0, dtype=tf.int32)
 	train_writer = tf.summary.create_file_writer(logdir=os.path.join(log_dir, "game"))
 	eval_writer = tf.summary.create_file_writer(logdir=os.path.join(log_dir, "eval"))
 
-	def epsilon_greedy():
-		epsilon = tf.math.pow(epsilon_greedy_base, tf.cast(train_global_step, tf.float32))
-		epsilon = tf.multiply(epsilon, epsilon_greedy_delta)
-		epsilon = tf.add(epsilon_greedy_end, epsilon)
-		return epsilon
+	epsilon_delta = tf.constant(epsilon_start - epsilon_end)
+	epsilon_base = tf.constant(1 - math.log(2) / epsilon_half_life)
 
-	def get_env(process_count, game_count, env_id_prefix):
-		meta_env_list = []
-		for i in range(process_count):
-			class ParallelPyTan(PyTan, ABC):
-				def __init__(self):
-					super().__init__(
-						game_count=game_count,
-						worker_count=thread_count,
-						log_dir=log_dir,
-						env_id="{}-{}".format(env_id_prefix, i))
+	def epsilon():
+		eps = tf.math.pow(epsilon_base, tf.cast(train_global_step, tf.float32))
+		eps = tf.multiply(eps, epsilon_delta)
+		eps = tf.add(epsilon_end, eps)
+		return eps
 
-			meta_env_list.append(ParallelPyTan)
+	def get_env(process_count, game_count):
+		class ParallelPyTan(PyTan, ABC):
+			def __init__(self):
+				super().__init__(game_count=game_count, worker_count=thread_count, log_dir=log_dir)
+
+		meta_env_list = [ParallelPyTan] * process_count
 		return tf_py_environment.TFPyEnvironment(ParallelPyEnvironment(meta_env_list))
 
 	def get_agent_list():
@@ -101,7 +102,7 @@ def mapped_train_eval(
 			fc_layer_params=fc_layer_params,
 			n_step_update=n_step_update,
 			learn_rate=learn_rate,
-			epsilon_greedy=epsilon_greedy,
+			epsilon_greedy=epsilon,
 			gamma=gamma,
 			log_dir=os.path.join(log_dir, "agents")
 		) for index in range(agent_count)]
@@ -138,11 +139,16 @@ def mapped_train_eval(
 		train_iteration.assign_add(1)
 
 	def update_eval_global_step(traj_list):
+		games_completed = np.sum(traj_list[0].is_last())
+		current_eval_episodes.assign_add(games_completed)
 		existing_games = len(tf.where(~traj_list[0].is_first()))
 		eval_global_step.assign_add(existing_games)
 		eval_iteration.assign_add(1)
 
 	def train_policies():
+
+		# TODO: train async to minimize performance hit
+
 		for agent in agent_list:
 			agent.train()
 
@@ -151,7 +157,7 @@ def mapped_train_eval(
 			log_str = ""
 			log_str += "[EVAL]  "
 			log_str += "[global: {}] ".format(str(eval_global_step.numpy()).rjust(10))
-			log_str += "[pct: {}%] ".format(str(int((eval_global_step.numpy() % eval_steps) / eval_steps * 100)).rjust(5))
+			log_str += "[games: {}%] ".format(str(int(current_eval_episodes.numpy() / eval_episodes * 100)).rjust(5))
 			log_str += "[rate: {}] ".format(str(eval_rate_tracker.steps_per_second())[:7])
 			print(log_str)
 
@@ -163,20 +169,18 @@ def mapped_train_eval(
 			log_str += "[pct: {}%] ".format(str(int(train_global_step.numpy() / total_steps * 100)).rjust(5))
 			log_str += "[step rate: {}] ".format(str(train_rate_tracker.steps_per_second())[:7])
 			log_str += "[iter rate: {}] ".format(str(iteration_rate_tracker.steps_per_second())[:7])
-			log_str += "[epsilon: {}] ".format(str(epsilon_greedy().numpy()))
+			log_str += "[epsilon: {}] ".format(str(epsilon().numpy()))
 			print(log_str)
 
 	metrics = ObservationMetrics()
 
 	train_env = get_env(
 		process_count=train_process_count,
-		game_count=train_game_count,
-		env_id_prefix="train")
+		game_count=train_game_count)
 
 	eval_env = get_env(
 		process_count=eval_process_count,
-		game_count=eval_game_count,
-		env_id_prefix="eval")
+		game_count=eval_game_count)
 
 	train_policy_mapping = random_policy_mapping(
 		agent_count=agent_count,
@@ -198,7 +202,7 @@ def mapped_train_eval(
 
 	train_driver = MappedDriver(
 		environment=train_env,
-		policy_list=[agent.agent.collect_policy for agent in agent_list],
+		policy_list=[agent.collect_policy for agent in agent_list],
 		policy_mapping=train_policy_mapping,
 		max_steps=train_steps,
 		observers=[
@@ -210,7 +214,7 @@ def mapped_train_eval(
 
 	eval_driver = MappedDriver(
 		environment=eval_env,
-		policy_list=[agent.agent.policy for agent in agent_list],
+		policy_list=[agent.policy for agent in agent_list],
 		policy_mapping=eval_policy_mapping,
 		max_steps=eval_steps,
 		observers=[
@@ -223,7 +227,7 @@ def mapped_train_eval(
 	eval_driver.run()
 
 	print("Providing initial steps to seed replay buffer.")
-	while train_iteration.numpy() < replay_buffer_size or train_iteration.numpy() < 2000:
+	while train_iteration.numpy() < replay_buffer_size or train_iteration.numpy() < initial_intervals:
 		train_driver.run()
 
 	print("Initial steps completed. Beginning Training.")
@@ -232,6 +236,7 @@ def mapped_train_eval(
 			train_driver.run()
 			train_policies()
 		print("Performing evaluation.")
+		current_eval_episodes.assign(0)
 		eval_env.reset()
 		eval_driver.run()
 

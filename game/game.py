@@ -21,12 +21,11 @@ from util.reverse_histogram import reverse_histogram
 
 
 class PyTan(PyEnvironment, ABC):
-	def __init__(self, game_count=1, worker_count=1, log_dir="./logs", env_id="", shaped_rewards=True):
+	def __init__(self, game_count=1, worker_count=1, log_dir="./logs", shaped_rewards=True):
 
 		super(PyTan, self).__init__(handle_auto_reset=True)
 		self.game_count = game_count
 		self.worker_count = worker_count
-		self.env_id = env_id
 
 		# Summaries
 		self.log_dir = log_dir
@@ -156,7 +155,7 @@ class PyTan(PyEnvironment, ABC):
 				future.result()
 
 	def _reset(self):
-		print("[{}] Resetting all games".format(self.env_id))
+		print("Resetting all games")
 		reset_games = [x for x in range(self.game_count)]
 		for game_index in reset_games:
 			self.reset_game(game_index)
