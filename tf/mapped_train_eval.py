@@ -29,7 +29,7 @@ game_per_process = num_game // num_process
 def mapped_train_eval(
 		# Performance / Logging
 		log_dir=os.path.join("./logs", "current"),
-		train_process_count=8,
+		train_process_count=7,
 		eval_process_count=1,
 		thread_count=2 ** 5,
 		agent_count=1,
@@ -37,10 +37,10 @@ def mapped_train_eval(
 		# Batching
 		train_game_count=2 ** 8,
 		eval_game_count=2 ** 3,
-		n_step_update=2 ** 6,
+		n_step_update=2 ** 5,
 
 		# Replay buffer
-		replay_buffer_size=650,
+		replay_buffer_size=500,
 		replay_batch_size=2 ** 6,
 
 		# Network parameters
@@ -49,13 +49,13 @@ def mapped_train_eval(
 		gamma=n_step_gamma,
 
 		# Greedy policy epsilon
-		epsilon_greedy_start=0.05,
+		epsilon_greedy_start=0.10,
 		epsilon_greedy_end=0.01,
 		epsilon_greedy_half_life=5e6,
 
 		# Intervals
 		total_steps=1e9,
-		eval_steps=2 ** 4 * 10000,
+		eval_steps=2 ** 4 * 0,
 		train_steps=2 ** 6,
 		train_per_eval=2 ** 11,
 		train_log_interval=2 ** 7,
@@ -163,6 +163,7 @@ def mapped_train_eval(
 			log_str += "[pct: {}%] ".format(str(int(train_global_step.numpy() / total_steps * 100)).rjust(5))
 			log_str += "[step rate: {}] ".format(str(train_rate_tracker.steps_per_second())[:7])
 			log_str += "[iter rate: {}] ".format(str(iteration_rate_tracker.steps_per_second())[:7])
+			log_str += "[epsilon: {}] ".format(str(epsilon_greedy().numpy()))
 			print(log_str)
 
 	metrics = ObservationMetrics()
@@ -222,7 +223,7 @@ def mapped_train_eval(
 	eval_driver.run()
 
 	print("Providing initial steps to seed replay buffer.")
-	while train_iteration.numpy() < replay_buffer_size:
+	while train_iteration.numpy() < replay_buffer_size or train_iteration.numpy() < 2000:
 		train_driver.run()
 
 	print("Initial steps completed. Beginning Training.")
