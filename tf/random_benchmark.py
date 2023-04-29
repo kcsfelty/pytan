@@ -73,10 +73,10 @@ def random_benchmark(
 							data = game_metrics[game_metric].numpy()
 							for scalar in data:
 								tf.summary.scalar(name=game_metric.lower(), data=scalar)
+
 				with tf.name_scope("benchmark"):
-					for turns in game_metrics[turn_number]:
-						episode_turn_list.append(turns)
-						tf.summary.scalar(name="turn_number", data=turns)
+					episode_turn_list.extend(game_metrics[turn_number])
+					with writer.as_default(step=train_global_step.numpy()):
 						tf.summary.scalar(name="mean", data=np.mean(episode_turn_list))
 						tf.summary.scalar(name="standard_deviation", data=np.std(episode_turn_list))
 		return handle_summaries
