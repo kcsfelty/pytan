@@ -78,7 +78,8 @@ class Handler:
 		np.copyto(player.dynamic_mask.mask_slices[df.discard][game_index], discard_trades_lookup[resource_tuple])
 
 	def check_player_purchase(self, player, game_index):
-		# assert player is self.game.current_player[game_index], self.game.get_crash_log(player, game_index)
+		if self.game.assert_state:
+			assert player is self.game.current_player[game_index], self.game.get_crash_log(player, game_index)
 		self.check_place_settlement(player, game_index)
 		self.check_place_city(player, game_index)
 		self.check_place_road(player, game_index)
@@ -113,7 +114,8 @@ class Handler:
 			after dice have been rolled
 			player is self_play player
 		"""
-		# assert player is self.game.current_player[game_index], self.game.get_crash_log(player, game_index)
+		if self.game.assert_state:
+			assert player is self.game.current_player[game_index], self.game.get_crash_log(player, game_index)
 		if player.can_afford(gs.development_card_cost, game_index) and len(self.game.development_card_stack[game_index]) > 0:
 			player.dynamic_mask.buy_development_card[game_index].fill(True)
 			player.apply_static(df.buy_development_card, game_index)
@@ -152,7 +154,8 @@ class Handler:
 			player must be self_play player
 			dice must have been rolled
 		"""
-		# assert self.rules.post_roll(player, game_index), self.game.get_crash_log(player, game_index)
+		if self.game.assert_state:
+			assert self.rules.post_roll(player, game_index), self.game.get_crash_log(player, game_index)
 		player.dynamic_mask.only(df.end_turn, game_index)
 		self.check_bank_trades(player, game_index)
 		self.check_general_port_trades(player, game_index)
@@ -167,12 +170,13 @@ class Handler:
 			build phase: after placing road
 			non-build phase: after rolling dice, building, card play or card buy might have occurred
 		"""
-		# assert self.rules.current_player(player, game_index), self.game.get_crash_log(player, game_index)
-		# if self.rules.build_phase(game_index):
-		# 	assert self.rules.game.state.build_phase_placed_settlement[game_index], self.game.get_crash_log(player, game_index)
-		# 	assert self.rules.game.state.build_phase_placed_road[game_index], self.game.get_crash_log(player, game_index)
-		# else:
-		# 	self.rules.dice_rolled(game_index), self.game.get_crash_log(player, game_index)
+		if self.game.assert_state:
+			assert self.rules.current_player(player, game_index), self.game.get_crash_log(player, game_index)
+			if self.rules.build_phase(game_index):
+				assert self.rules.game.state.build_phase_placed_settlement[game_index], self.game.get_crash_log(player, game_index)
+				assert self.rules.game.state.build_phase_placed_road[game_index], self.game.get_crash_log(player, game_index)
+			else:
+				self.rules.dice_rolled(game_index), self.game.get_crash_log(player, game_index)
 
 		# Reset the self_play player to non-active status
 		player.current_player[game_index].fill(False)
@@ -224,7 +228,8 @@ class Handler:
 			never during build phase
 			during pre-roll, a development card may have been played
 		"""
-		# assert self.rules.pre_roll(player, game_index), self.game.get_crash_log(player, game_index)
+		if self.game.assert_state:
+			assert self.rules.pre_roll(player, game_index), self.game.get_crash_log(player, game_index)
 		roll = roll or self.game.dice.roll()
 		self.game.state.current_roll[game_index].fill(0)
 		self.game.state.current_roll[game_index][roll] = 1
@@ -282,8 +287,9 @@ class Handler:
 			player trading
 			robber theft
 		"""
-		# assert self.rules.current_player(player_from, game_index), self.game.get_crash_log(player_from, game_index)
-		# assert not self.rules.current_player(player_to, game_index), self.game.get_crash_log(player_to, game_index)
+		if self.game.assert_state:
+			assert self.rules.current_player(player_from, game_index), self.game.get_crash_log(player_from, game_index)
+			assert not self.rules.current_player(player_to, game_index), self.game.get_crash_log(player_to, game_index)
 		self.game.crash_log[game_index].append("player_trade" + str(player_from) + str(player_to) + str(trade))
 		change = np.sum(trade)
 		player_from.resource_cards[game_index] += trade
@@ -326,7 +332,8 @@ class Handler:
 		Occurs:
 			post-roll
 		"""
-		# assert self.rules.post_roll(player, game_index), self.game.get_crash_log(player, game_index)
+		if self.game.assert_state:
+			assert self.rules.post_roll(player, game_index), self.game.get_crash_log(player, game_index)
 		self.game.player_trades_this_turn[game_index] += 1
 		player.dynamic_mask.only(df.no_action, game_index)
 		player.offering_trade[game_index].fill(True)
@@ -342,7 +349,8 @@ class Handler:
 		Occurs:
 			after a trade offer was made, player must be able to afford
 		"""
-		# assert self.rules.accept_player_trade(player, game_index), self.game.get_crash_log(player, game_index)
+		if self.game.assert_state:
+			assert self.rules.accept_player_trade(player, game_index), self.game.get_crash_log(player, game_index)
 		player.accepted_trade[game_index].fill(True)
 		player.dynamic_mask.only(df.no_action, game_index)
 		self.game.trading_player[game_index].static_mask.confirm_player_trade[game_index][player.index] = True
@@ -353,7 +361,8 @@ class Handler:
 		Occurs:
 			after a trade offer was made, player may or may not be able to afford
 		"""
-		# assert self.rules.decline_player_trade(player, game_index), self.game.get_crash_log(player, game_index)
+		if self.game.assert_state:
+			assert self.rules.decline_player_trade(player, game_index), self.game.get_crash_log(player, game_index)
 		player.declined_trade[game_index].fill(1)
 		player.dynamic_mask.only(df.no_action, game_index)
 		self.check_trade_responses(game_index)
@@ -373,7 +382,8 @@ class Handler:
 		Occurs:
 			after all opponents have responded to the standing trade offer
 		"""
-		# assert self.rules.cancel_player_trade(player, game_index), self.game.get_crash_log(player, game_index)
+		if self.game.assert_state:
+			assert self.rules.cancel_player_trade(player, game_index), self.game.get_crash_log(player, game_index)
 		player.static_mask.confirm_player_trade[game_index].fill(0)
 		self.game.trading_player[game_index] = None
 		player.offering_trade[game_index].fill(False)
@@ -389,7 +399,8 @@ class Handler:
 		Occurs:
 			after all opponents have responded to the self_play trade offer and at least one accepted
 		"""
-		# assert self.rules.confirm_player_trade(trade_player, player, game_index), self.game.get_crash_log(player, game_index)
+		if self.game.assert_state:
+			assert self.rules.confirm_player_trade(trade_player, player, game_index), self.game.get_crash_log(player, game_index)
 		self.handle_player_trade(player, trade_player, self.game.state.current_player_trade[game_index], game_index)
 		trade_player.player_trade_total += self.game.state.current_player_trade[game_index]
 		player.player_trade_total -= self.game.state.current_player_trade[game_index]
@@ -402,9 +413,10 @@ class Handler:
 			after all players finish discarding after robber roll
 			after knight card played
 		"""
-		# assert player.current_player[game_index], self.game.get_crash_log(player, game_index)
-		# assert self.game.board.robbed_tile[game_index] is not tile, self.game.get_crash_log(player, game_index)
-		# assert player.must_move_robber[game_index], self.game.get_crash_log(player, game_index)
+		if self.game.assert_state:
+			assert player.current_player[game_index], self.game.get_crash_log(player, game_index)
+			assert self.game.board.robbed_tile[game_index] is not tile, self.game.get_crash_log(player, game_index)
+			assert player.must_move_robber[game_index], self.game.get_crash_log(player, game_index)
 		player.must_move_robber[game_index] = False
 		self.game.board.robbed_tile[game_index].has_robber[game_index].fill(False)
 		self.game.board.robbed_tile[game_index] = tile
@@ -433,9 +445,10 @@ class Handler:
 		Occurs:
 			after a move_robber to a tile with at least one opponent
 		"""
-		# assert self.rules.current_player(player, game_index), self.game.get_crash_log(player, game_index)
-		# assert not self.rules.current_player(rob_player, game_index), self.game.get_crash_log(rob_player, game_index)
-		# assert self.rules.player_can_be_robbed(rob_player, game_index), self.game.get_crash_log(player, game_index)
+		if self.game.assert_state:
+			assert self.rules.current_player(player, game_index), self.game.get_crash_log(player, game_index)
+			assert not self.rules.current_player(rob_player, game_index), self.game.get_crash_log(rob_player, game_index)
+			assert self.rules.player_can_be_robbed(rob_player, game_index), self.game.get_crash_log(player, game_index)
 		rob_player_deck = reverse_histogram(rob_player.resource_cards[game_index])
 		random.shuffle(rob_player_deck)
 		trade = np.zeros(gs.resource_type_count, dtype=np.int32)
@@ -448,8 +461,9 @@ class Handler:
 			self.check_player_play_development_card(player, game_index)
 
 	def handle_discard(self, trade, player, game_index):
-		# assert player.must_discard[game_index] > 0, self.game.get_crash_log(player, game_index)
-		# assert not self.rules.build_phase(game_index), self.game.get_crash_log(player, game_index)
+		if self.game.assert_state:
+			assert player.must_discard[game_index] > 0, self.game.get_crash_log(player, game_index)
+			assert not self.rules.build_phase(game_index), self.game.get_crash_log(player, game_index)
 		# assert dice rolled
 		self.handle_bank_trade(trade, player, game_index)
 		player.discard_total[game_index] -= trade
@@ -467,19 +481,20 @@ class Handler:
 			self.game.current_player[game_index].must_move_robber[game_index] = True
 
 	def handle_place_city(self, vertex, player, game_index):
-		# assert player.city_count[game_index] < gs.max_city_count, self.game.get_crash_log(player, game_index)
-		# assert player.current_player[game_index], self.game.get_crash_log(player, game_index)
-		# assert vertex.owned_by[game_index] is player, self.game.get_crash_log(player, game_index)
-		# assert not self.game.state.build_phase[game_index], self.game.get_crash_log(player, game_index)
-		# assert player.can_afford(gs.city_cost, game_index), self.game.get_crash_log(player, game_index)
-		# assert np.any(self.game.state.current_roll[game_index] == 1), self.game.get_crash_log(player, game_index)
-		# assert vertex.settlement[game_index], self.game.get_crash_log(player, game_index)
-		# assert not vertex.city[game_index], self.game.get_crash_log(player, game_index)
-		# assert not vertex.open[game_index], self.game.get_crash_log(player, game_index)
-		# for adjacent_vertex in vertex.vertices:
-		# 	assert adjacent_vertex.owned_by[game_index] is None, self.game.get_crash_log(player, game_index)
-		# 	assert not adjacent_vertex.city[game_index], self.game.get_crash_log(player, game_index)
-		# 	assert not adjacent_vertex.settlement[game_index], self.game.get_crash_log(player, game_index)
+		if self.game.assert_state:
+			assert player.city_count[game_index] < gs.max_city_count, self.game.get_crash_log(player, game_index)
+			assert player.current_player[game_index], self.game.get_crash_log(player, game_index)
+			assert vertex.owned_by[game_index] is player, self.game.get_crash_log(player, game_index)
+			assert not self.game.state.build_phase[game_index], self.game.get_crash_log(player, game_index)
+			assert player.can_afford(gs.city_cost, game_index), self.game.get_crash_log(player, game_index)
+			assert np.any(self.game.state.current_roll[game_index] == 1), self.game.get_crash_log(player, game_index)
+			assert vertex.settlement[game_index], self.game.get_crash_log(player, game_index)
+			assert not vertex.city[game_index], self.game.get_crash_log(player, game_index)
+			assert not vertex.open[game_index], self.game.get_crash_log(player, game_index)
+			for adjacent_vertex in vertex.vertices:
+				assert adjacent_vertex.owned_by[game_index] is None, self.game.get_crash_log(player, game_index)
+				assert not adjacent_vertex.city[game_index], self.game.get_crash_log(player, game_index)
+				assert not adjacent_vertex.settlement[game_index], self.game.get_crash_log(player, game_index)
 		self.handle_bank_trade(gs.city_cost, player, game_index)
 		self.give_player_city(vertex, player, game_index)
 		self.block_vertex_city(vertex, game_index)
@@ -504,24 +519,25 @@ class Handler:
 			block_player.dynamic_mask.place_city[game_index][vertex.index] = False
 
 	def handle_place_road(self, edge, player, game_index):
-		# assert player.road_count[game_index] < gs.max_road_count, self.game.get_crash_log(player, game_index)
-		# assert self.rules.current_player(player, game_index), self.game.get_crash_log(player, game_index)
-		# if not self.game.state.build_phase[game_index]:
-		# 	has_near_road = False
-		# 	for adjacent_edge in edge.edges:
-		# 		if adjacent_edge in player.edge_list[game_index]:
-		# 			vertex_owner = edge.adjacent_edge_vertex[adjacent_edge].owned_by[game_index]
-		# 			if vertex_owner not in player.other_players:
-		# 				has_near_road = True
-		# 	assert has_near_road, self.game.get_crash_log(player, game_index)
-		# 	assert np.any(self.game.state.current_roll[game_index] == 1), self.game.get_crash_log(player, game_index)
-		# 	assert player.can_afford(gs.road_cost, game_index), self.game.get_crash_log(player, game_index)
-		# else:
-		# 	has_near_vertex = False
-		# 	for adjacent_vertex in edge.vertices:
-		# 		if adjacent_vertex.owned_by[game_index] == player:
-		# 			has_near_vertex = True
-		# 	assert has_near_vertex, self.game.get_crash_log(player, game_index)
+		if self.game.assert_state:
+			assert player.road_count[game_index] < gs.max_road_count, self.game.get_crash_log(player, game_index)
+			assert self.rules.current_player(player, game_index), self.game.get_crash_log(player, game_index)
+			if not self.game.state.build_phase[game_index]:
+				has_near_road = False
+				for adjacent_edge in edge.edges:
+					if adjacent_edge in player.edge_list[game_index]:
+						vertex_owner = edge.adjacent_edge_vertex[adjacent_edge].owned_by[game_index]
+						if vertex_owner not in player.other_players:
+							has_near_road = True
+				assert has_near_road, self.game.get_crash_log(player, game_index)
+				assert np.any(self.game.state.current_roll[game_index] == 1), self.game.get_crash_log(player, game_index)
+				assert player.can_afford(gs.road_cost, game_index), self.game.get_crash_log(player, game_index)
+			else:
+				has_near_vertex = False
+				for adjacent_vertex in edge.vertices:
+					if adjacent_vertex.owned_by[game_index] == player:
+						has_near_vertex = True
+				assert has_near_vertex, self.game.get_crash_log(player, game_index)
 		for block_player in self.game.player_list:
 			block_player.static_mask.place_road[game_index][edge.index] = False
 			block_player.dynamic_mask.place_road[game_index][edge.index] = False
@@ -563,23 +579,24 @@ class Handler:
 					player.set_longest_road(True, game_index)
 
 	def handle_place_settlement(self, vertex, player, game_index):
-		# assert player.settlement_count[game_index] < gs.max_settlement_count, self.game.get_crash_log(player, game_index)
-		# assert player.current_player[game_index], self.game.get_crash_log(player, game_index)
-		# if not self.game.state.build_phase[game_index]:
-		# 	has_near_road = False
-		# 	for adjacent_road in vertex.edges:
-		# 		if adjacent_road in player.edge_list[game_index]:
-		# 			has_near_road = True
-		# 	assert np.any(self.game.state.current_roll[game_index] == 1), self.game.get_crash_log(player, game_index)
-		# 	assert has_near_road, self.game.get_crash_log(player, game_index)
-		# 	assert player.can_afford(gs.settlement_cost, game_index), self.game.get_crash_log(player, game_index)
-		# assert vertex.open[game_index], self.game.get_crash_log(player, game_index)
-		# assert vertex.owned_by[game_index] is None, self.game.get_crash_log(player, game_index)
-		# assert not vertex.city[game_index], self.game.get_crash_log(player, game_index)
-		# for adjacent_vertex in vertex.vertices:
-		# 	assert adjacent_vertex.owned_by[game_index] is None, self.game.get_crash_log(player, game_index)
-		# 	assert not adjacent_vertex.city[game_index], self.game.get_crash_log(player, game_index)
-		# 	assert not adjacent_vertex.settlement[game_index], self.game.get_crash_log(player, game_index)
+		if self.game.assert_state:
+			assert player.settlement_count[game_index] < gs.max_settlement_count, self.game.get_crash_log(player, game_index)
+			assert player.current_player[game_index], self.game.get_crash_log(player, game_index)
+			if not self.game.state.build_phase[game_index]:
+				has_near_road = False
+				for adjacent_road in vertex.edges:
+					if adjacent_road in player.edge_list[game_index]:
+						has_near_road = True
+				assert np.any(self.game.state.current_roll[game_index] == 1), self.game.get_crash_log(player, game_index)
+				assert has_near_road, self.game.get_crash_log(player, game_index)
+				assert player.can_afford(gs.settlement_cost, game_index), self.game.get_crash_log(player, game_index)
+			assert vertex.open[game_index], self.game.get_crash_log(player, game_index)
+			assert vertex.owned_by[game_index] is None, self.game.get_crash_log(player, game_index)
+			assert not vertex.city[game_index], self.game.get_crash_log(player, game_index)
+			for adjacent_vertex in vertex.vertices:
+				assert adjacent_vertex.owned_by[game_index] is None, self.game.get_crash_log(player, game_index)
+				assert not adjacent_vertex.city[game_index], self.game.get_crash_log(player, game_index)
+				assert not adjacent_vertex.settlement[game_index], self.game.get_crash_log(player, game_index)
 		if self.game.state.build_phase[game_index]:
 			self.handle_build_phase_settlement(vertex, player, game_index)
 		self.give_player_settlement(vertex, player, game_index)
@@ -675,12 +692,13 @@ class Handler:
 			adjacent_tile.players_to_rob[game_index, player.index, player.index] = False
 
 	def handle_buy_development_card(self, _, player, game_index):
-		# assert len(self.game.development_card_stack[game_index]) > 0, self.game.get_crash_log(player, game_index)
-		# assert not self.game.state.build_phase[game_index], self.game.get_crash_log(player, game_index)
-		# assert player.current_player[game_index], self.game.get_crash_log(player, game_index)
-		# assert player is self.game.current_player[game_index], self.game.get_crash_log(player, game_index)
-		# assert player.can_afford(gs.development_card_cost, game_index), self.game.get_crash_log(player, game_index)
-		# assert np.any(self.game.state.current_roll[game_index] == 1), self.game.get_crash_log(player, game_index)
+		if self.game.assert_state:
+			assert len(self.game.development_card_stack[game_index]) > 0, self.game.get_crash_log(player, game_index)
+			assert not self.game.state.build_phase[game_index], self.game.get_crash_log(player, game_index)
+			assert player.current_player[game_index], self.game.get_crash_log(player, game_index)
+			assert player is self.game.current_player[game_index], self.game.get_crash_log(player, game_index)
+			assert player.can_afford(gs.development_card_cost, game_index), self.game.get_crash_log(player, game_index)
+			assert np.any(self.game.state.current_roll[game_index] == 1), self.game.get_crash_log(player, game_index)
 		if player is not self.game.current_player[game_index]:
 			return
 		self.handle_bank_trade(gs.development_card_cost, player, game_index)
@@ -702,10 +720,11 @@ class Handler:
 			self.set_post_roll_mask(player, game_index)
 
 	def handle_play_dev_card(self, card_index, player, game_index):
-		# assert player.current_player[game_index], self.game.get_crash_log(player, game_index)
-		# assert player is self.game.current_player[game_index], self.game.get_crash_log(player, game_index)
-		# assert player.development_cards[game_index][card_index] > 0, self.game.get_crash_log(player, game_index)
-		# assert self.game.state.played_development_card_count[game_index] < gs.max_development_cards_played_per_turn, self.game.get_crash_log(player, game_index)
+		if self.game.assert_state:
+			assert player.current_player[game_index], self.game.get_crash_log(player, game_index)
+			assert player is self.game.current_player[game_index], self.game.get_crash_log(player, game_index)
+			assert player.development_cards[game_index][card_index] > 0, self.game.get_crash_log(player, game_index)
+			assert self.game.state.played_development_card_count[game_index] < gs.max_development_cards_played_per_turn, self.game.get_crash_log(player, game_index)
 		player.development_cards[game_index][card_index] -= 1
 		player.development_cards_played[game_index][card_index] += 1
 		player.development_card_count[game_index] -= 1

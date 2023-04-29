@@ -21,11 +21,12 @@ from util.reverse_histogram import reverse_histogram
 
 
 class PyTan(PyEnvironment, ABC):
-	def __init__(self, game_count=1, worker_count=1, log_dir="./logs", shaped_rewards=True):
+	def __init__(self, game_count=1, worker_count=1, log_dir="./logs", shaped_rewards=True, assert_state=False):
 
 		super(PyTan, self).__init__(handle_auto_reset=True)
 		self.game_count = game_count
 		self.worker_count = worker_count
+		self.assert_state = assert_state
 
 		# Summaries
 		self.log_dir = log_dir
