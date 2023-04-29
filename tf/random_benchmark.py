@@ -28,6 +28,9 @@ def random_benchmark(
 
 		# Intervals
 		total_episodes=10000,
+
+		# Debug
+		assert_state=False,
 	):
 	iteration = tf.Variable(0, dtype=tf.int32)
 	train_global_step = tf.Variable(0, dtype=tf.int32)
@@ -39,7 +42,11 @@ def random_benchmark(
 	def get_env(process_count, game_count):
 		class ParallelPyTan(PyTan, ABC):
 			def __init__(self):
-				super().__init__(game_count=game_count, worker_count=thread_count, log_dir=log_dir)
+				super().__init__(
+					game_count=game_count,
+					worker_count=thread_count,
+					log_dir=log_dir,
+					assert_state=assert_state)
 		meta_env_list = [ParallelPyTan] * process_count
 		return tf_py_environment.TFPyEnvironment(ParallelPyEnvironment(meta_env_list))
 
